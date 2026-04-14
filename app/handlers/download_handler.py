@@ -279,7 +279,7 @@ def notice_emby_scan_library(path):
             }
         ]
     }
-    emby_response = requests.post(url, headers=headers, json=data)
+    emby_response = requests.post(url, headers=headers, json=data, timeout=(5, 15))
     if emby_response.text == "":
         init.logger.info("通知Emby扫库成功！")
         return True

@@ -25,7 +25,7 @@ def get_movie_cover(query, page=1):
         "user-agent": init.USER_AGENT,
         "accept-language": "zh-CN"
     }
-    response = requests.get(headers=headers, url=url)
+    response = requests.get(headers=headers, url=url, timeout=(5, 30))
     if response.status_code != 200:
         return ""
     soup = BeautifulSoup(response.text, features="html.parser")
@@ -37,6 +37,8 @@ def get_movie_cover(query, page=1):
     tags_img = soup.find_all('img')
     image_tag = is_movie_exist(query, tags_img)
     if image_tag is None:
+        if page >= 5:
+            return ""
         page += 1
         time.sleep(3)
         return get_movie_cover(query, page)
@@ -45,7 +47,7 @@ def get_movie_cover(query, page=1):
         return ""
     main_page = tag_parent['href']
     url = base_url + main_page
-    response = requests.get(headers=headers, url=url)
+    response = requests.get(headers=headers, url=url, timeout=(5, 30))
     if response.status_code != 200:
         return ""
     soup = BeautifulSoup(response.text, features="html.parser")

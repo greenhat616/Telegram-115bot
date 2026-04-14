@@ -37,7 +37,7 @@ def get_max_page(html_content):
 def get_today_av():
     date = datetime.datetime.now().strftime("%Y-%m-%d")
     url = f"https://javbee.vip/date/{date}"
-    response = requests.get(url, verify=False)
+    response = requests.get(url, verify=False, timeout=(10, 60))
     if response.status_code == 500:
         init.logger.warn(f"服务器响应错误，可能是[{date}]尚未更新。")
         return None
@@ -51,7 +51,7 @@ def get_today_av():
 
 def get_av_by_date(date):
     url = f"https://javbee.vip/date/{date}"
-    response = requests.get(url, verify=False)
+    response = requests.get(url, verify=False, timeout=(10, 60))
     if response.status_code == 500:
         init.logger.warn(f"服务器响应错误，可能是[{date}]尚未更新。")
         return None
@@ -114,7 +114,7 @@ def get_yesterday_av():
     yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
     date = yesterday.strftime("%Y-%m-%d")
     url = f"https://javbee.vip/date/{date}"
-    response = requests.get(url, verify=False)
+    response = requests.get(url, verify=False, timeout=(10, 60))
     if response.status_code == 500:
         init.logger.warn(f"服务器响应错误，可能是[{date}]尚未更新。")
         return None
@@ -291,7 +291,7 @@ if __name__ == "__main__":
     # date = datetime.datetime.now() - datetime.timedelta(days=1)
     # print(f"昨天日期: {date.strftime('%Y-%m-%d')}")
     url = f"https://javbee.vip/date/2025-08-26"
-    response = requests.get(url, verify=False)
+    response = requests.get(url, verify=False, timeout=(10, 60))
     result = crawl_javbee(url, response.text, '2025-08-26')
     for item in result:
         print(item['av_number'], item['av_title'], item['magnet_url'])

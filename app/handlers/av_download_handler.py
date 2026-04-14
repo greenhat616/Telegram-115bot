@@ -221,7 +221,7 @@ async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def get_av_result(av_number):
     result = []
     url = f"https://sukebei.nyaa.si/?q={av_number}&f=0&c=0_0"
-    response = requests.get(url)
+    response = requests.get(url, timeout=(10, 30))
     if response.status_code != 200:
         return result
     soup = BeautifulSoup(response.text, 'html.parser')

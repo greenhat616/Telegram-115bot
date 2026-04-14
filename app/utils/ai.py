@@ -46,7 +46,7 @@ def chat_completion(tip_words, max_tokens=8192):
     }
 
     try:
-        response = requests.post(url, json=payload, headers=headers)
+        response = requests.post(url, json=payload, headers=headers, timeout=(10, 60))
         if response.status_code != 200:
             init.logger.warn(f"AI API请求失败: {response.text}")
             return None

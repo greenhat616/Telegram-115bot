@@ -124,7 +124,7 @@ class OpenAPI_115:
             "code_challenge": challenge,
             "code_challenge_method": "sha256"
         }
-        response = requests.post(f"https://passportapi.115.com/open/authDeviceCode", headers=header, data=data)
+        response = requests.post(f"https://passportapi.115.com/open/authDeviceCode", headers=header, data=data, timeout=(5, 30))
         res = response.json()
         if response.status_code == 200:
             uid = res['data']['uid']
@@ -161,7 +161,7 @@ class OpenAPI_115:
             "sign": sign
         }
         while True:
-            response = requests.get(f"https://qrcodeapi.115.com/get/status/", params=params)
+            response = requests.get(f"https://qrcodeapi.115.com/get/status/", params=params, timeout=(5, 15))
             if response.status_code == 200:
                 res = response.json()
                 if res['state'] == 0:
@@ -183,7 +183,7 @@ class OpenAPI_115:
                         response = requests.post("https://passportapi.115.com/open/deviceCodeToToken", headers=header, data={
                             "uid": uid,
                             "code_verifier": verifier
-                        })
+                        }, timeout=(5, 30))
                         res = response.json()
                         if response.status_code == 200 and 'data' in res:
                             self.access_token = res['data']['access_token']
@@ -236,7 +236,7 @@ class OpenAPI_115:
         }
         
         try:
-            response = requests.post(url, headers=header, data=data)
+            response = requests.post(url, headers=header, data=data, timeout=(5, 30))
             res = response.json()
         except Exception as e:
             init.logger.warn(f"刷新Token请求异常: {e}")
@@ -284,9 +284,9 @@ class OpenAPI_115:
                 headers = self._get_headers()
         
         if method.upper() == 'GET':
-            response = requests.get(url, headers=headers, params=params)
+            response = requests.get(url, headers=headers, params=params, timeout=(5, 30))
         elif method.upper() == 'POST':
-            response = requests.post(url, headers=headers, data=data)
+            response = requests.post(url, headers=headers, data=data, timeout=(5, 30))
         else:
             raise ValueError(f"不支持的HTTP方法: {method}")
         if response.status_code == 200:

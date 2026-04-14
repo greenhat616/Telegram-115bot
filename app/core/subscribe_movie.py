@@ -188,7 +188,7 @@ def get_response_from_api(url):
         "X-APP-ID": init.bot_config['x_app_id'],
         "X-API-KEY": init.bot_config['x_api_key']
     }
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers, timeout=(5, 30))
     return response.json()
 
 
