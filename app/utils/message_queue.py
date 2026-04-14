@@ -12,23 +12,41 @@ global_loop = None
 
 
 def add_task_to_queue(sub_user, post_url, message, keyboard=None, retry_count=0):
-    """向消息队列中添加任务（线程安全）"""
+    """向消息队列中添加任务（线程安全，用于非 async 上下文）"""
     global global_loop
     if global_loop is None:
         init.logger.error("事件循环尚未启动，无法添加任务到队列")
         return False
-    
+
     try:
         future = asyncio.run_coroutine_threadsafe(
             message_queue.put((sub_user, post_url, message, keyboard, retry_count)),
-            global_loop 
+            global_loop
         )
-        future.result(timeout=30)  # 等待任务添加到队列，设置超时时间
+        future.result(timeout=10)  # 缩短超时，避免长时间阻塞调用线程
         init.logger.debug(f"任务已添加到队列: {sub_user}, {post_url}, {message}")
         return True
     except TimeoutError:
         init.logger.error(f"添加任务到队列超时: {sub_user}, {post_url}, {message}")
         return False
+    except Exception as e:
+        init.logger.error(f"添加任务到队列失败: {e}")
+        return False
+
+
+def add_task_to_queue_nowait(sub_user, post_url, message, keyboard=None, retry_count=0):
+    """向消息队列中添加任务（非阻塞 fire-and-forget，适用于不想阻塞调用方的场景）"""
+    global global_loop
+    if global_loop is None:
+        init.logger.error("事件循环尚未启动，无法添加任务到队列")
+        return False
+
+    try:
+        asyncio.run_coroutine_threadsafe(
+            message_queue.put((sub_user, post_url, message, keyboard, retry_count)),
+            global_loop
+        )
+        return True
     except Exception as e:
         init.logger.error(f"添加任务到队列失败: {e}")
         return False
