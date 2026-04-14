@@ -10,21 +10,17 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class SqlLiteLib:
-    def __init__(self):
-        self.conn: sqlite3.Connection | None = None
-        self.cursor: sqlite3.Cursor | None = None
+    def __init__(self, db_file: str = ""):
+        db_path = db_file or init.DB_FILE
+        self.conn: sqlite3.Connection = sqlite3.connect(db_path)
+        self.cursor: sqlite3.Cursor = self.conn.cursor()
         self.logger = init.logger
 
     def __enter__(self):
-        self.connect(init.DB_FILE)  # 自动连接
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()  # 自动关闭连接
-
-    def connect(self, db_file:str):
-        self.conn = sqlite3.connect(db_file)
-        self.cursor = self.conn.cursor()
+        self.close()
 
     def execute_sql(self, sql: str, params: tuple = ()):
         try:

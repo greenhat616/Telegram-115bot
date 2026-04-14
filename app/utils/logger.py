@@ -5,10 +5,11 @@ import os
 
 
 class Logger:
-    def __init__(self, level=logging.INFO, debug_model=False):
+    def __init__(self, level: int = logging.INFO, log_dir: str = ""):
         """
         日志类构造函数
         :param level: 日志级别
+        :param log_dir: 日志文件输出目录，为空则仅输出到控制台
         """
         self.logger = logging.getLogger()
         self.logger.setLevel(level)
@@ -19,11 +20,10 @@ class Logger:
         ch.setFormatter(fmt)
         ch.setLevel(level)
         self.logger.addHandler(ch)
-        
-        if not debug_model:
-            from app.init import CONFIG
+
+        if log_dir:
             # 日志文件输出
-            fs = logging.FileHandler(os.path.join(CONFIG, "115bot.log"), encoding="utf-8", mode='w')
+            fs = logging.FileHandler(os.path.join(log_dir, "115bot.log"), encoding="utf-8", mode='w')
             fs.setLevel(level)
             fs.setFormatter(fmt)
             self.logger.addHandler(fs)

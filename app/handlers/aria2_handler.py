@@ -75,13 +75,13 @@ async def push2aria2(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 try:
                     # 如果编辑caption失败，尝试编辑文本（适用于纯文本消息）
-                    if download:
+                    if all_pushed:
                         await query.edit_message_text(f"✅ [{last_part}]已推送至{device_name}！")
                     else:
                         await query.edit_message_text(f"❌ [{last_part}]推送到{device_name}失败，请检查配置或稍后再试。")
                 except Exception:
                     # 如果都失败，使用answer显示结果
-                    if download:
+                    if all_pushed:
                         await query.answer(f"✅ [{last_part}]已推送至{device_name}！", show_alert=True)
                     else:
                         await query.answer(f"❌ [{last_part}]推送到{device_name}失败，请检查配置或稍后再试。", show_alert=True)

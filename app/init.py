@@ -17,8 +17,8 @@ from app.utils.logger import Logger
 # 调试模式
 debug_mode: bool = False
 
-# 全局日志
-logger: Logger | None = None
+# 全局日志（立即初始化为仅控制台输出，create_logger() 会用完整配置替换）
+logger: Logger = Logger()
 
 # 全局配置
 bot_config: BotConfig | None = None
@@ -117,12 +117,14 @@ def create_logger():
     }
     log_level_str = bot_config.log_level.value if bot_config else 'info'
     log_level = LOG_LEVEL_MAP.get(log_level_str, logging.INFO)
+    # 清除默认 logger 的 handlers，防止重复输出
+    logging.getLogger().handlers.clear()
     # 全局日志实例，输出到命令行和文件
-    logger = Logger(level=log_level, debug_model=debug_mode)
-    
+    logger = Logger(level=log_level, log_dir="" if debug_mode else CONFIG)
+
     # 屏蔽 telethon 的 INFO 日志，避免刷屏
     logging.getLogger('telethon').setLevel(logging.WARNING)
-    
+
     logger.info("Logger init success!")
 
 

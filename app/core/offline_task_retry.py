@@ -73,8 +73,8 @@ def sehua_offline():
     check_results = []
     sections = init.bot_config.sehua_spider.sections
     for section in sections:
-        section_name = section.get('name', '')
-        save_path = section.get('save_path', f'/AV/涩花/{section_name}')
+        section_name = section.name
+        save_path = section.save_path or f'/AV/涩花/{section_name}'
         sql = "select * from sehua_data WHERE is_download=0 and section_name=? order by publish_date desc"
         with SqlLiteLib() as sqlite:
             results = sqlite.query_all(sql, (section_name,))

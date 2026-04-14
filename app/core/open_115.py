@@ -999,7 +999,7 @@ class OpenAPI_115:
             line4 = escape_markdown(f"离线配额：{quota_info['used']}/{quota_info['count']}", version=2)   
             return line1, line2, line3, line4
         else:
-            line1 = escape_markdown(f"👋 [{user_name}]您好， 欢迎使用Telegram-115Bot！", version=2)
+            line1 = escape_markdown("👋 您好， 欢迎使用Telegram-115Bot！", version=2)
             return line1, "", "", ""
 
 

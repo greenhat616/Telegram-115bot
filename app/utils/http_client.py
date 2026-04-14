@@ -71,9 +71,11 @@ def _retryable_5xx(response):
 
 def _return_last_response_or_raise(retry_state: RetryCallState):
     """重试耗尽后：异常则抛出，5xx 响应则返回最后的 Response（而非 RetryError）"""
-    if retry_state.outcome.failed:
-        raise retry_state.outcome.exception()
-    return retry_state.outcome.result()
+    outcome = retry_state.outcome
+    assert outcome is not None
+    if outcome.failed:
+        raise outcome.exception()
+    return outcome.result()
 
 
 def _select_client(use_long_io=False, verify=True):
