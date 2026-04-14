@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from selenium.webdriver.common.by import By
 from selenium import webdriver
 from app.utils.http_client import http_request_long
-import init
+from app import init
 from seleniumbase import SB
 import subprocess
 from selenium.webdriver.support.ui import WebDriverWait
@@ -59,7 +59,7 @@ class SeleniumBrowser:
                 if self.base_url:
                     if not self.base_url.startswith('http'):
                         self.base_url = f"https://{self.base_url}"
-                    self.driver.set_page_load_timeout(init.bot_config.get("selenium_timeout", 60))
+                    self.driver.set_page_load_timeout(init.bot_config.selenium_timeout)
                     self.driver.get(self.base_url)
                     
                 init.logger.info("远程 Selenium 连接成功")
@@ -113,7 +113,7 @@ class SeleniumBrowser:
                 except:
                     pass
 
-                self.driver.set_page_load_timeout(init.bot_config.get("selenium_timeout", 60))
+                self.driver.set_page_load_timeout(init.bot_config.selenium_timeout)
 
                 if self.base_url:
                     if not self.base_url.startswith('http'):

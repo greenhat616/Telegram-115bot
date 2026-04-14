@@ -6,7 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, ConversationHandler, CallbackQueryHandler, MessageHandler, filters
 from telegram.error import TelegramError
 import time
-import init
+from app import init
 from app.utils.message_queue import add_task_to_queue
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -34,8 +34,8 @@ async def start_av_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
     # 显示主分类（电影/剧集）
     keyboard = [
-        [InlineKeyboardButton(f"📁 {category['display_name']}", callback_data=category['name'])] for category in
-        init.bot_config['category_folder']
+        [InlineKeyboardButton(f"📁 {category.display_name}", callback_data=category.name)] for category in
+        init.bot_config.category_folder
     ]
     # 只在有最后保存路径时才显示该选项
     if hasattr(init, 'bot_session') and "av_last_save" in init.bot_session:
@@ -61,8 +61,8 @@ async def start_batch_download_command(update: Update, context: ContextTypes.DEF
     context.user_data["dl_links"] = update.message.text
     # 显示主分类（电影/剧集）
     keyboard = [
-        [InlineKeyboardButton(f"📁 {category['display_name']}", callback_data=category['name'])] for category in
-        init.bot_config['category_folder']
+        [InlineKeyboardButton(f"📁 {category.display_name}", callback_data=category.name)] for category in
+        init.bot_config.category_folder
     ]
     # 只在有最后保存路径时才显示该选项
     if hasattr(init, 'bot_session') and "av_last_save" in init.bot_session:
@@ -97,8 +97,8 @@ async def download_from_file(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data["dl_links"] = links
     # 显示主分类（电影/剧集）
     keyboard = [
-        [InlineKeyboardButton(f"📁 {category['display_name']}", callback_data=category['name'])] for category in
-        init.bot_config['category_folder']
+        [InlineKeyboardButton(f"📁 {category.display_name}", callback_data=category.name)] for category in
+        init.bot_config.category_folder
     ]
     # 只在有最后保存路径时才显示该选项
     if hasattr(init, 'bot_session') and "av_last_save" in init.bot_session:
@@ -154,12 +154,12 @@ async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYP
     else:
         context.user_data["selected_main_category"] = selected_main_category
         sub_categories = [
-            item['path_map'] for item in init.bot_config["category_folder"] if item['name'] == selected_main_category
+            item.path_map for item in init.bot_config.category_folder if item.name == selected_main_category
         ][0]
 
         # 创建子分类按钮
         keyboard = [
-            [InlineKeyboardButton(f"📁 {category['name']}", callback_data=category['path'])] for category in sub_categories
+            [InlineKeyboardButton(f"📁 {category.name}", callback_data=category.path)] for category in sub_categories
         ]
         keyboard.append([InlineKeyboardButton("取消", callback_data="cancel")])
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -297,7 +297,7 @@ def download_task(av_result, av_number, save_path, user_id):
         
     except Exception as e:
         init.logger.warn(f"💀下载遇到错误: {str(e)}")
-        add_task_to_queue(init.bot_config['allowed_user'], f"{init.IMAGE_PATH}/male023.png",
+        add_task_to_queue(init.bot_config.allowed_user, f"{init.IMAGE_PATH}/male023.png",
                             message=f"❌ 下载任务执行出错: {escape_markdown(str(e), version=2)}")
     finally:
         # 清空离线任务
@@ -317,7 +317,7 @@ def push2aria2(save_path, user_id, cover_image, message):
         'path': save_path
     }
     
-    device_name = init.bot_config.get('aria2', {}).get('device_name', 'Aria2') or 'Aria2'
+    device_name = init.bot_config.aria2.device_name or 'Aria2'
     
     keyboard = [
         [InlineKeyboardButton(f"推送到{device_name}", callback_data=f"push2aria2_{push_task_id}")]

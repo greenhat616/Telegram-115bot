@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-import init
-from app.utils.sqlitelib import *
+from app import init
+from app.utils.sqlitelib import SqlLiteLib
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 from app.utils.message_queue import add_task_to_queue
@@ -122,7 +122,7 @@ def try_to_offline2115_again():
                             init.logger.info(f"cover_url: {cover_url}")
                             # 发送通知给授权用户
                             add_task_to_queue(
-                                init.bot_config['allowed_user'], 
+                                init.bot_config.allowed_user, 
                                 cover_url, 
                                 message=message
                             )
@@ -131,7 +131,7 @@ def try_to_offline2115_again():
                         except Exception as e:
                             init.logger.warn(f"Unexpected error: {e}")
                     else:
-                        add_task_to_queue(init.bot_config['allowed_user'], None, message=message)
+                        add_task_to_queue(init.bot_config.allowed_user, None, message=message)
                     
                     # 标记任务为完成
                     mark_task_as_completed(task_id)

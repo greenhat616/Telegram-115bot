@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import json
 import time
 import asyncio
 import threading
@@ -9,7 +8,7 @@ from telegram.ext import ContextTypes, CommandHandler, Application
 from telegram.helpers import escape_markdown
 
 # 导入init模块（此时__init__.py已经设置了模块路径）
-import init
+from app import init
 
 from app.utils.message_queue import add_task_to_queue, queue_worker
 from app.handlers.auth_handler import register_auth_handlers
@@ -89,7 +88,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def reload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     init.load_yaml_config()
     init.logger.info("Reload configuration success:")
-    init.logger.info(json.dumps(init.bot_config))
+    init.logger.info(init.bot_config.model_dump_json())
     await context.bot.send_message(chat_id=update.effective_chat.id, text="🔁重载配置完成！", parse_mode="html")
 
 def start_async_loop():
@@ -98,7 +97,7 @@ def start_async_loop():
     asyncio.set_event_loop(loop)
     init.logger.info("事件循环已启动")
     try:
-        token = init.bot_config['bot_token']
+        token = init.bot_config.bot_token
         loop.create_task(queue_worker(loop, token))
         loop.run_forever()
     except Exception as e:
@@ -128,7 +127,7 @@ def send_start_message():
 发送 `/start` 查看操作说明"""
         
         add_task_to_queue(
-            init.bot_config['allowed_user'], 
+            init.bot_config.allowed_user, 
             f"{init.IMAGE_PATH}/neuter010.png", 
             message=formatted_message
         )
@@ -204,10 +203,10 @@ def main():
             init.logger.error("消息队列线程未准备就绪，程序将退出。")
             exit(1)
     init.logger.info("Starting bot with configuration:")
-    init.logger.info(json.dumps(init.bot_config))
+    init.logger.info(init.bot_config.model_dump_json())
     # 调整telegram日志级别
     update_logger_level()
-    token = init.bot_config['bot_token']
+    token = init.bot_config.bot_token
     application = Application.builder().token(token).post_init(post_init).build()
     # 注册全局异常处理器
     application.add_error_handler(error_handler)
@@ -223,7 +222,7 @@ def main():
     if not init.initialize_115open():
         init.logger.error("115 OpenAPI客户端初始化失败，程序无法继续运行！")
         add_task_to_queue(
-            init.bot_config['allowed_user'],
+            init.bot_config.allowed_user,
             f"{init.IMAGE_PATH}/male023.png",
             message="❌ 115 OpenAPI客户端初始化失败，程序无法继续运行！\n请检查Token或115 AppID设置是否正确！"
         )

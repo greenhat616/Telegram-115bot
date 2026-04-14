@@ -6,7 +6,7 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 sys.path.append(current_dir)
 from bs4 import BeautifulSoup
-import init
+from app import init
 import asyncio
 from app.utils.http_client import http_request
 import time

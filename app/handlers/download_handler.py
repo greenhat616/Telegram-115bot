@@ -5,7 +5,7 @@ from telegram.ext import ContextTypes, CommandHandler, ConversationHandler, \
     MessageHandler, filters, CallbackQueryHandler
 from telegram.error import TelegramError
 from telegram.helpers import escape_markdown
-import init
+from app import init
 import asyncio
 import re
 import time
@@ -14,10 +14,10 @@ from app.utils.cover_capture import get_movie_cover
 from app.utils.message_queue import add_task_to_queue
 from app.utils.ai import get_movie_tmdb_name_with_ai
 from app.utils.http_client import http_request_fast
-from enum import Enum
 from warnings import filterwarnings
 from telegram.warnings import PTBUserWarning
-from app.utils.sqlitelib import *
+from app.utils.sqlitelib import SqlLiteLib
+from app.models.enums import DownloadUrlType
 from concurrent.futures import ThreadPoolExecutor
 
 filterwarnings(action="ignore", message=r".*CallbackQueryHandler", category=PTBUserWarning)
@@ -26,16 +26,6 @@ SELECT_MAIN_CATEGORY, SELECT_SUB_CATEGORY = range(10, 12)
 
 # 全局线程池，用于处理下载任务
 download_executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="Movie_Download")
-
-class DownloadUrlType(Enum):
-    ED2K = "ED2K"
-    THUNDER = "thunder"
-    MAGNET = "magnet"
-    HTTP = "http"
-    UNKNOWN = "unknown"
-    
-    def __str__(self):
-        return self.value
 
 
 async def start_d_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -55,8 +45,8 @@ async def start_d_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["dl_url_type"] = dl_url_type
     # 显示主分类（电影/剧集）
     keyboard = [
-        [InlineKeyboardButton(f"📁 {category['display_name']}", callback_data=category['name'])] for category in
-        init.bot_config['category_folder']
+        [InlineKeyboardButton(f"📁 {category.display_name}", callback_data=category.name)] for category in
+        init.bot_config.category_folder
     ]
     # 只在有最后保存路径时才显示该选项
     if hasattr(init, 'bot_session') and "movie_last_save" in init.bot_session:
@@ -93,12 +83,12 @@ async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYP
     else:
         context.user_data["selected_main_category"] = query_data
         sub_categories = [
-            item['path_map'] for item in init.bot_config["category_folder"] if item['name'] == query_data
+            item.path_map for item in init.bot_config.category_folder if item.name == query_data
         ][0]
 
         # 创建子分类按钮
         keyboard = [
-            [InlineKeyboardButton(f"📁 {category['name']}", callback_data=category['path'])] for category in sub_categories
+            [InlineKeyboardButton(f"📁 {category.name}", callback_data=category.path)] for category in sub_categories
         ]
         keyboard.append([InlineKeyboardButton("取消", callback_data="cancel")])
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -203,7 +193,7 @@ def is_valid_link(link: str) -> DownloadUrlType:
 
 
 def create_strm_file(new_name, file_list):
-    strm_mode = init.bot_config.get('strm_mode', 'disable')
+    strm_mode = init.bot_config.strm_mode
     # 检查是否需要创建软链
     if strm_mode == "disable":
         return
@@ -211,8 +201,8 @@ def create_strm_file(new_name, file_list):
         init.logger.debug(f"Original new_name: {new_name}")
 
         # 获取根目录
-        cd2_mount_root = Path(init.bot_config.get('mount_root', '/CloudNAS/115'))
-        strm_root = Path(init.bot_config.get('strm_root', '/media/115'))
+        cd2_mount_root = Path(init.bot_config.mount_root)
+        strm_root = Path(init.bot_config.strm_root)
 
         # 构建目标路径和 .strm 文件的路径
         relative_path = Path(new_name).relative_to(Path(new_name).anchor)
@@ -235,7 +225,7 @@ def create_strm_file(new_name, file_list):
             if strm_mode == "strm_local":
                 mkv_file = cd2_mount_path / file
             else:
-                mkv_file = Path(init.bot_config.get('openlist_root', '/115')) / relative_path / (Path(file))
+                mkv_file = Path(init.bot_config.openlist_root) / relative_path / (Path(file))
 
             # 日志输出以验证 .strm 文件和目标文件
             init.logger.debug(f"target_file (.strm): {target_file}")
@@ -253,14 +243,14 @@ def create_strm_file(new_name, file_list):
 
 
 def notice_emby_scan_library(path):
-    strm_root = Path(init.bot_config.get("strm_root", ""))
+    strm_root = Path(init.bot_config.strm_root)
     if not strm_root:
         init.logger.warn("未设置strm_root，无法扫库！")
         return False
     relative_path = Path(path).relative_to(Path(path).anchor)
     movie_path_in_emby = strm_root / relative_path
-    emby_server = init.bot_config['emby_server']
-    api_key = init.bot_config['api_key']
+    emby_server = init.bot_config.emby_server
+    api_key = init.bot_config.api_key
     if api_key is None or api_key.strip() == "" or api_key.strip().lower() == "your_api_key":
         init.logger.warn("Emby API Key 未配置，跳过通知Emby扫库")
         return False
@@ -597,7 +587,7 @@ def push2aria2(new_final_path, cover_url, message, user_id):
         'path': new_final_path
     }
     
-    device_name = init.bot_config.get('aria2', {}).get('device_name', 'Aria2') or 'Aria2'
+    device_name = init.bot_config.aria2.device_name or 'Aria2'
     
     keyboard = [
         [InlineKeyboardButton(f"推送到{device_name}", callback_data=f"push2aria2_{push_task_id}")]

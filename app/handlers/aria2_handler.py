@@ -4,7 +4,7 @@ from pathlib import Path
 import asyncio
 import time
 import os
-import init
+from app import init
 from concurrent.futures import ThreadPoolExecutor
 from app.utils.aria2 import download_by_url, check_status_by_url
 from app.utils.message_queue import add_task_to_queue
@@ -57,8 +57,8 @@ async def push2aria2(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 init.logger.warn("❌ 无效的文件路径，无法推送到Aria2。")
                 await query.answer("❌ 无效的文件路径，无法推送到Aria2。", show_alert=True)
                 return
-            device_name = init.bot_config.get('aria2', {}).get('device_name', 'Aria2') or 'Aria2'
-            download_path_base = init.bot_config.get("aria2", {}).get("download_path", "")
+            device_name = init.bot_config.aria2.device_name or 'Aria2'
+            download_path_base = init.bot_config.aria2.download_path
             # 移至线程池避免阻塞主事件循环
             all_pushed, last_part = await asyncio.to_thread(
                 _do_aria2_push, save_path, download_path_base, device_name, update.effective_chat.id

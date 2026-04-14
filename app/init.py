@@ -4,39 +4,43 @@ import os
 import yaml
 import shutil
 import subprocess
-from typing import Optional
+from typing import Any
 from telethon import TelegramClient
 from app.core.open_115 import OpenAPI_115
-
-
-
+from app.models.config import BotConfig
 
 
 from app.utils.logger import Logger
-from app.utils.sqlitelib import *
 
 
 # 调试模式
-debug_mode = False
+debug_mode: bool = False
 
 # 全局日志
-logger:Optional[Logger] = None
+logger: Logger | None = None
 
 # 全局配置
-bot_config = dict()
+bot_config: BotConfig | None = None
 
 # 115开放API对象
-openapi_115 = None
+openapi_115: OpenAPI_115 | None = None
 
 # Tg 用户客户端
-tg_user_client: Optional[TelegramClient] = None
+tg_user_client: TelegramClient | None = None
 
 # aria2 客户端
-aria2_client = None
+aria2_client: Any = None
 
 # 爬取状态
-CRAWL_SEHUA_STATUS = 0  # 涩花爬取状态
-CRAWL_JAV_STATUS = 0    # javbee爬取状态
+CRAWL_SEHUA_STATUS: int = 0
+CRAWL_JAV_STATUS: int = 0
+
+# 会话状态
+bot_session: dict[str, str] = {}
+# 待处理任务
+pending_tasks: dict[str, dict] = {}
+# 待推送任务
+pending_push_tasks: dict[str, dict] = {}
 
 
 # yaml配置文件
@@ -111,8 +115,8 @@ def create_logger():
         'error': logging.ERROR,
         'critical': logging.CRITICAL
     }
-    log_level = bot_config.get('log_level', 'info').lower()
-    log_level = LOG_LEVEL_MAP.get(log_level, logging.INFO)
+    log_level_str = bot_config.log_level.value if bot_config else 'info'
+    log_level = LOG_LEVEL_MAP.get(log_level_str, logging.INFO)
     # 全局日志实例，输出到命令行和文件
     logger = Logger(level=log_level, debug_model=debug_mode)
     
@@ -129,7 +133,7 @@ def load_yaml_config():
     """
     global bot_config, CONFIG_FILE, CONFIG_FILE_EXAMPLE, APP
     yaml_path = CONFIG_FILE
-    
+
     example_config_path = f"{APP}/config.yaml.example"
     # 尝试更新示例配置文件
     try:
@@ -137,14 +141,14 @@ def load_yaml_config():
     except Exception as e:
         print(f"Update config example file failed: {e}")
 
+    raw_config = None
     # 获取yaml文件名称
     try:
         # 获取yaml文件路径
         if os.path.exists(yaml_path):
             with open(yaml_path, 'r', encoding='utf-8') as f:
                 cfg = f.read()
-                f.close()
-            bot_config = yaml.load(cfg, Loader=yaml.FullLoader)
+            raw_config = yaml.load(cfg, Loader=yaml.FullLoader)
         else:
             if os.path.exists(example_config_path):
                 # 确保目标目录存在
@@ -155,28 +159,22 @@ def load_yaml_config():
                 # 重新读取配置文件
                 with open(yaml_path, 'r', encoding='utf-8') as f:
                     cfg = f.read()
-                    f.close()
-                bot_config = yaml.load(cfg, Loader=yaml.FullLoader)
+                raw_config = yaml.load(cfg, Loader=yaml.FullLoader)
             else:
                 print("Config example file not found!")
     except Exception as e:
         print(f"配置文件[{yaml_path}]格式有误，请检查!")
 
+    if raw_config:
+        bot_config = BotConfig.model_validate(raw_config)
+
 
 def get_bot_token():
-    global CONFIG_FILE, bot_config
-    bot_token = ""
-    if 'bot_token' in bot_config.keys():
-        bot_token = bot_config['bot_token']
-    else:
-        yaml_path = CONFIG_FILE
-        if os.path.exists(yaml_path):
-            with open(yaml_path, 'r', encoding='utf-8') as f:
-                cfg = f.read()
-                f.close()
-            bot_config = yaml.load(cfg, Loader=yaml.FullLoader)
-            bot_token = bot_config['bot_token']
-        return bot_token
+    global bot_config
+    if bot_config:
+        return bot_config.bot_token
+    load_yaml_config()
+    return bot_config.bot_token if bot_config else ""
 
 def create_tmp():
     if not os.path.exists(TEMP):
@@ -191,21 +189,19 @@ def initialize_tg_usr_client():
     global tg_user_client, bot_config, logger
     try:
         # 兼容老版本的配置项拼写错误
-        mistake = bot_config.get('bote_name', "")
-        if mistake:
+        if bot_config.bote_name:
             logger.warn("检测到配置项 'bote_name'（拼写错误），已自动迁移到 'bot_name'。")
-            bot_config['bot_name'] = mistake
-            # 清理错误的配置项
-            bot_config.pop('bote_name', None)
-            
-        if not bot_config.get('tg_api_id') or not bot_config.get('tg_api_hash') or not bot_config.get('bot_name'):
+            bot_config.bot_name = bot_config.bote_name
+            bot_config.bote_name = None
+
+        if not bot_config.tg_api_id or not bot_config.tg_api_hash or not bot_config.bot_name:
             logger.warn("缺少必要的Telegram API配置 (tg_api_id & tg_api_hash & bot_name), 无法使用视频上传功能。")
             logger.warn("配置方法请参考：https://github.com/qiqiandfei/Telegram-115bot/wiki/VideoDownload")
             tg_user_client = None
             return False
-            
-        api_id = bot_config['tg_api_id']
-        api_hash = bot_config['tg_api_hash']
+
+        api_id = bot_config.tg_api_id
+        api_hash = bot_config.tg_api_hash
 
         # 检查并验证session文件
         if not create_tg_session_file():
@@ -278,22 +274,20 @@ def initialize_115open():
 
 
 def check_user(user_id):
-    global bot_config
-    if isinstance(bot_config.get('allowed_user'), int):
-        if user_id == bot_config['allowed_user']:
-            return True
-    if isinstance(bot_config.get('allowed_user'), str):
-        if str(user_id) == bot_config['allowed_user']:
-            return True
-    return False
+    if bot_config is None:
+        return False
+    allowed = bot_config.allowed_user
+    if isinstance(allowed, int):
+        return user_id == allowed
+    return str(user_id) == str(allowed)
 
 def create_tg_session_file():
     """
     创建或验证Telegram session文件
     如果session文件存在但已过期，会重新创建
     """
-    tg_api_id = bot_config.get('tg_api_id', "")
-    tg_api_hash = bot_config.get('tg_api_hash', "")
+    tg_api_id = bot_config.tg_api_id or ""
+    tg_api_hash = bot_config.tg_api_hash or ""
     
     if not (tg_api_id and tg_api_hash):
         logger.error("缺少 tg_api_id 或 tg_api_hash 配置")
@@ -330,15 +324,15 @@ def create_tg_session_file():
 
 def init_aria2():
     from app.utils.aria2 import create_aria2_client
-    global bot_config, aria2_client
-    if not bot_config.get('aria2', {}).get('enable', False):
+    global aria2_client
+    if not bot_config.aria2.enable:
         logger.info("Aria2功能未启用，跳过Aria2客户端初始化。")
         aria2_client = None
         return
     aria2_client = create_aria2_client(
-        host=bot_config.get('aria2').get('host', ''),
-        port=bot_config.get('aria2').get('port', ''),
-        secret=bot_config.get('aria2').get('rpc_secret', '')
+        host=bot_config.aria2.host,
+        port=bot_config.aria2.port,
+        secret=bot_config.aria2.rpc_secret,
     )
     if aria2_client:
         logger.info("Aria2客户端初始化完毕！")
@@ -346,6 +340,7 @@ def init_aria2():
         aria2_client = None
 
 def init_db():
+    from app.utils.sqlitelib import SqlLiteLib
     with SqlLiteLib() as sqlite:
         # 创建表（如果不存在）
         # create_table_query = '''

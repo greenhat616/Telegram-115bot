@@ -6,7 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, ConversationHandler, CallbackQueryHandler, MessageHandler, filters
 from telegram.error import TelegramError
 import time
-import init
+from app import init
 from app.utils.message_queue import add_task_to_queue
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -64,9 +64,9 @@ async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYP
                 await query.edit_message_text(error_message)
                 return ConversationHandler.END
             # 从配置文件获取子类别
-            javbus_config = init.bot_config.get("rsshub", {}).get("javbus", {})
-            categories_config = javbus_config.get("category", [])
-            subcategories = [cat.get("name") for cat in categories_config if cat.get("name")]
+            javbus_config = init.bot_config.rsshub.javbus
+            categories_config = javbus_config.category
+            subcategories = [cat.name for cat in categories_config if cat.name]
 
             for subcat in subcategories:
                 keyboard.append([InlineKeyboardButton(subcat, callback_data=f"rss_sub_{subcat}")])
@@ -82,9 +82,9 @@ async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYP
                 await query.edit_message_text(error_message)
                 return ConversationHandler.END
             # 从配置文件获取子类别
-            t66y_config = init.bot_config.get("rsshub", {}).get("t66y", {})
-            sections = t66y_config.get("sections", [])
-            subcategories = [section.get("name") for section in sections if section.get("name")]
+            t66y_config = init.bot_config.rsshub.t66y
+            sections = t66y_config.sections
+            subcategories = [section.name for section in sections if section.name]
             for subcat in subcategories:
                 keyboard.append([InlineKeyboardButton(subcat, callback_data=f"rss_sub_{subcat}")])
             keyboard.append([InlineKeyboardButton("取消", callback_data="rss_quit")])
@@ -107,16 +107,16 @@ async def select_sub_category(update: Update, context: ContextTypes.DEFAULT_TYPE
         main_category = context.user_data.get('rss_main_category')
         
         if main_category == "JavBus":
-            for category in init.bot_config.get("rsshub", {}).get("javbus", {}).get("category", []):
-                if category.get("name") == sub_category:
+            for category in init.bot_config.rsshub.javbus.category:
+                if category.name == sub_category:
                     context.user_data['selected_category'] = category
-                    if category.get("need_input", False):
+                    if category.need_input:
                         message = escape_markdown(f"⌨️ 请输入 **{sub_category}** 的关键词：\n注意：输入的内容需保证在JavBus有返回结果！", version=2)
                         await query.edit_message_text(text=message, parse_mode='MarkdownV2')
                         return RSS_WAIT_INPUT
                     else:
-                        rss_host = init.bot_config.get("rsshub").get("rss_host").rstrip('/')
-                        route = category.get("route", "").rstrip('/').lstrip('/')
+                        rss_host = init.bot_config.rsshub.rss_host.rstrip('/')
+                        route = (category.route or "").rstrip('/').lstrip('/')
                         rss_url = f"{rss_host}/{route}"
                         message = escape_markdown(f"✅ 您已选择订阅：\n主类别：{main_category}\n子类别：{sub_category}\n\nJavBus订阅服务已启动，请稍后...", version=2)
                         await query.edit_message_text(text=message, parse_mode='MarkdownV2')
@@ -124,7 +124,7 @@ async def select_sub_category(update: Update, context: ContextTypes.DEFAULT_TYPE
                         return ConversationHandler.END
                     
         if main_category == "草榴1024":
-            rss_host = init.bot_config.get("rsshub").get("rss_host").rstrip('/')
+            rss_host = init.bot_config.rsshub.rss_host.rstrip('/')
             message = escape_markdown(f"✅ 您已选择订阅：\n主类别：{main_category}\n子类别：{sub_category}\n\n草榴1024订阅服务已启动，请稍后...", version=2)
             await query.edit_message_text(text=message, parse_mode='MarkdownV2')
             asyncio.create_task(start_t66y_rss_async(sub_category))
@@ -138,11 +138,11 @@ async def rss_handle_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     main_category = context.user_data.get('rss_main_category')
     selected_category = context.user_data.get('selected_category')
     
-    rss_host = init.bot_config.get("rsshub").get("rss_host").rstrip('/')
+    rss_host = init.bot_config.rsshub.rss_host.rstrip('/')
     rss_url = ""
-    
+
     if main_category == "JavBus":
-        rss_url = f"{rss_host}/{selected_category.get('route').rstrip('/').lstrip('/')}/{user_input}"
+        rss_url = f"{rss_host}/{selected_category.route.rstrip('/').lstrip('/')}/{user_input}"
         # 启动后台任务
         asyncio.create_task(rss_javbus(sub_category, rss_url, user_input))
 
@@ -165,13 +165,9 @@ async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def check_rss_config(main_category=None):
     error_message = ""
-    rss_config = init.bot_config.get("rsshub")
-    if rss_config is None:
-        error_message = "❌ RSSHub配置缺失，请检查配置文件！"
-        init.logger.warn(error_message)
-        return error_message
-    rss_host = rss_config.get("rss_host")
-    if rss_host is None:
+    rss_config = init.bot_config.rsshub
+    rss_host = rss_config.rss_host
+    if not rss_host:
         error_message = "❌ RSSHub地址未配置，请检查配置文件！"
         init.logger.warn(error_message)
         return error_message
@@ -185,43 +181,35 @@ def check_rss_config(main_category=None):
             error_message = "❌ RSSHub地址不可用，请检查配置！"
             init.logger.warn(error_message)
             return error_message
-    
+
     if main_category == "JavBus":
         # 检查javbus
-        javbus_config = rss_config.get("javbus")
-        if javbus_config is None:
-            error_message = "❌ RSSHub JavBus配置缺失，请检查配置文件！"
-            init.logger.warn(error_message)
-            return error_message
-        categories = javbus_config.get("category")
-        if not categories or not isinstance(categories, list):
+        javbus_config = rss_config.javbus
+        categories = javbus_config.category
+        if not categories:
             error_message = "❌ RSSHub JavBus类别配置错误，请检查配置文件！"
             init.logger.warn(error_message)
             return error_message
         for category in categories:
-            if not category.get("name") or not category.get("route") or not category.get("save_path"):
+            if not category.name or not category.route or not category.save_path:
                 error_message = "❌ RSSHub JavBus类别配置不完整，请检查配置文件！"
                 init.logger.warn(error_message)
                 return error_message
-    
+
     if main_category == "草榴1024":
         # 检查t66y
-        t66y_config = rss_config.get("t66y")
-        if t66y_config is None:
-            error_message = "❌ RSSHub 草榴1024配置缺失，请检查配置文件！"
-            init.logger.warn(error_message)
-            return error_message
-        sections = t66y_config.get("sections")
-        if not sections or not isinstance(sections, list):
+        t66y_config = rss_config.t66y
+        sections = t66y_config.sections
+        if not sections:
             error_message = "❌ RSSHub 草榴1024版块配置错误，请检查配置文件！"
             init.logger.warn(error_message)
             return error_message
         for section in sections:
-            if not section.get("name") or not section.get("save_path"):
+            if not section.name or not section.save_path:
                 error_message = "❌ RSSHub 草榴1024版块配置不完整，请检查配置文件！"
                 init.logger.warn(error_message)
                 return error_message
-    
+
     return error_message
 
 def register_rss_handlers(application):

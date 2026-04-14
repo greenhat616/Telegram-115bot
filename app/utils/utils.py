@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import re
-import init
+from app import init
 from datetime import datetime, timedelta, date
 import yaml
 import os

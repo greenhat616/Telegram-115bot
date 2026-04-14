@@ -6,9 +6,9 @@ current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 sys.path.append(current_dir)
-import init
+from app import init
 import datetime
-from app.utils.sqlitelib import *
+from app.utils.sqlitelib import SqlLiteLib
 import time
 import random
 import os
@@ -37,7 +37,7 @@ def _build_full_url(path: str):
     return f"{base}/{path.lstrip('/')}"
 
 def get_base_url():
-    base_url = init.bot_config.get('sehua_spider', {}).get('base_url', "www.sehuatang.net")
+    base_url = init.bot_config.sehua_spider.base_url
     if not base_url:
         base_url = "www.sehuatang.net"
     return base_url
@@ -153,25 +153,25 @@ def get_section_id(section_name):
 async def sehua_spider_start_async():
     """完整的爬虫启动函数，包含浏览器生命周期管理"""
     global browser
-    if not init.bot_config.get('sehua_spider', {}).get('enable', False):
+    if not init.bot_config.sehua_spider.enable:
         return
     # 初始化全局浏览器
     browser = SeleniumBrowser(get_base_url())
-    
+
     try:
         await browser.init_browser()
-        
+
         if not browser.driver:
-            add_task_to_queue(init.bot_config['allowed_user'], None, f"❌ 浏览器初始化失败！")
+            add_task_to_queue(init.bot_config.allowed_user, None, f"❌ 浏览器初始化失败！")
             return
-            
+
         # 尝试通过 Cloudflare 验证
         await browser.pass_cloudflare_check()
         yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
         date = yesterday.strftime("%Y-%m-%d")
-        sections = init.bot_config['sehua_spider'].get('sections', [])
+        sections = init.bot_config.sehua_spider.sections
         for section in sections:
-            section_name = section.get('name')
+            section_name = section.name
             init.logger.info(f"开始爬取 {section_name} 分区...")
             await section_spider(section_name, date)
             init.logger.info(f"{section_name} 分区爬取完成")
@@ -205,15 +205,15 @@ async def sehua_spider_by_date_async(date):
         await browser.init_browser()
         # 初始化全局浏览器
         if not browser.driver:
-            add_task_to_queue(init.bot_config['allowed_user'], None, f"❌ 浏览器初始化失败！")
+            add_task_to_queue(init.bot_config.allowed_user, None, f"❌ 浏览器初始化失败！")
             init.CRAWL_SEHUA_STATUS = 0
             return
-            
+
         # 尝试通过 Cloudflare 验证
         await browser.pass_cloudflare_check()
-        sections = init.bot_config['sehua_spider'].get('sections', [])
+        sections = init.bot_config.sehua_spider.sections
         for section in sections:
-            section_name = section.get('name')
+            section_name = section.name
             init.logger.info(f"开始爬取 {section_name} 分区...")
             await section_spider(section_name, date)
             init.logger.info(f"{section_name} 分区爬取完成")
@@ -798,11 +798,11 @@ def match_strategy(result):
 
 
 def get_sehua_save_path(_section_name):
-    sections = init.bot_config.get('sehua_spider', {}).get('sections', [])
+    sections = init.bot_config.sehua_spider.sections
     for section in sections:
-        section_name = section.get('name', '')
+        section_name = section.name
         if section_name == _section_name:
-            return section.get('save_path', f'/AV/涩花/{section_name}')
+            return section.save_path or f'/AV/涩花/{section_name}'
     return f'/AV/涩花/{_section_name}'
 
 

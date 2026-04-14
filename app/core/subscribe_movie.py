@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-import init
+from app import init
 from bs4 import BeautifulSoup
 import time
 from app.utils.http_client import http_request
 from pathlib import Path
-from app.utils.sqlitelib import *
+from app.utils.sqlitelib import SqlLiteLib
 from app.handlers.download_handler import create_strm_file, notice_emby_scan_library
 from app.utils.message_queue import add_task_to_queue
 from app.utils.cover_capture import get_movie_cover
@@ -152,24 +152,24 @@ def check_condition(res, key):
             if isinstance(quality, str):
                 if "Dolby Vision" == quality or "dolby vision" == quality.lower():
                     is_dolby_vision = True
-        if init.bot_config['sub_condition']['dolby_vision'] and is_dolby_vision:
+        if init.bot_config.sub_condition.dolby_vision and is_dolby_vision:
             score += 10
         if zh_sub == 1:
              score += 10
-        for index, cfg_resolution in enumerate(init.bot_config['sub_condition']['resolution_priority'], 0):
+        for index, cfg_resolution in enumerate(init.bot_config.sub_condition.resolution_priority, 0):
             if resolution:
                 if str(cfg_resolution) in resolution or str(cfg_resolution) in movie_name:
-                    score += len(init.bot_config['sub_condition']['resolution_priority']) - index
+                    score += len(init.bot_config.sub_condition.resolution_priority) - index
             else:
                 if str(cfg_resolution) in movie_name:
-                    score += len(init.bot_config['sub_condition']['resolution_priority']) - index
+                    score += len(init.bot_config.sub_condition.resolution_priority) - index
         res_list.append({'score': score, 'download_url': download_url, 'size': size, 'zh_sub': zh_sub, 'is_dolby_vision': is_dolby_vision})
     if res_list:
         # 按分数从高到低排序
         sorted_res_list = sorted(res_list, key=lambda x: x['score'], reverse=True)
         highest_score_item = None
         for item in sorted_res_list:
-            if init.bot_config['sub_condition']['dolby_vision']:
+            if init.bot_config.sub_condition.dolby_vision:
                 # 必须同时满足杜比卫视和中字
                 if item['zh_sub'] == 0 or item['is_dolby_vision'] == False:
                     continue
@@ -185,8 +185,8 @@ def check_condition(res, key):
 def get_response_from_api(url):
     headers = {
         "User-Agent": init.USER_AGENT,
-        "X-APP-ID": init.bot_config['x_app_id'],
-        "X-API-KEY": init.bot_config['x_api_key']
+        "X-APP-ID": init.bot_config.x_app_id,
+        "X-API-KEY": init.bot_config.x_api_key
     }
     response = http_request("GET", url, headers=headers, timeout=(5, 30))
     return response.json()
@@ -230,7 +230,7 @@ def download_from_link(download_url, movie_name, save_path):
                 return False
     except Exception as e:
         init.logger.error(f"💀下载遇到错误: {str(e)}")
-        add_task_to_queue(init.bot_config['allowed_user'], f"{init.IMAGE_PATH}/male023.png",
+        add_task_to_queue(init.bot_config.allowed_user, f"{init.IMAGE_PATH}/male023.png",
                             message=f"❌ 下载任务执行出错: {escape_markdown(str(e), version=2)}")
         return False
     finally:

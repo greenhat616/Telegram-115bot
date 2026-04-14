@@ -1,12 +1,12 @@
 
-import init
+from app import init
 import time
 import os
 import asyncio
 import shutil
 from pathlib import Path
 from datetime import datetime
-from app.utils.sqlitelib import *
+from app.utils.sqlitelib import SqlLiteLib
 from app.utils.message_queue import add_task_to_queue
 from telegram.helpers import escape_markdown
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -70,7 +70,7 @@ def offline_task_retry():
 def sehua_offline():
     save_path_list= []
     check_results = []
-    sections = init.bot_config.get('sehua_spider', {}).get('sections', [])
+    sections = init.bot_config.sehua_spider.sections
     for section in sections:
         section_name = section.get('name', '')
         save_path = section.get('save_path', f'/AV/涩花/{section_name}')
@@ -87,7 +87,7 @@ def sehua_offline():
             if offline_groups:
                 for save_path, batches in offline_groups.items():
                     # 按年月分类存储
-                    save_path = add_year_month_to_path(init.bot_config.get('sehua_spider', {}).get('sort_by_year_month', False), save_path)
+                    save_path = add_year_month_to_path(init.bot_config.sehua_spider.sort_by_year_month, save_path)
                     if save_path not in save_path_list:
                         save_path_list.append(save_path)
                     for batch_tasks in batches:
@@ -95,7 +95,7 @@ def sehua_offline():
                         offline2115(batch_tasks, task_count, save_path)
             else:
                 init.logger.warn("涩花离线任务未执行，可能是115离线配额不足，请检查115账号状态！")
-                add_task_to_queue(init.bot_config['allowed_user'], f"{init.IMAGE_PATH}/male023.png", "涩花离线任务未执行，可能是115离线配额不足，请检查115账号状态！")
+                add_task_to_queue(init.bot_config.allowed_user, f"{init.IMAGE_PATH}/male023.png", "涩花离线任务未执行，可能是115离线配额不足，请检查115账号状态！")
                 return
 
     # 等待离线完成
@@ -128,7 +128,7 @@ def sehua_offline():
             asia_uncensored_count += 1
         elif section_name == '高清中文字幕':
             hd_subtitle_count += 1
-        save_path = add_year_month_to_path(init.bot_config.get('sehua_spider', {}).get('sort_by_year_month', False), item['save_path'])
+        save_path = add_year_month_to_path(init.bot_config.sehua_spider.sort_by_year_month, item['save_path'])
         for task in offline_task_status:
             if task['url'] == magnet:
                 if task['status'] == 2 and task['percentDone'] == 100:
@@ -178,9 +178,9 @@ def sehua_offline():
     if messages: 
         final_message = "**涩花离线任务完成情况:**\n" + "\n".join(messages)
         if domestic_original_success + asia_censored_success + asia_uncensored_success + hd_subtitle_success > 0:
-            add_task_to_queue(init.bot_config['allowed_user'], f"{init.IMAGE_PATH}/sehua_daily_update.png", final_message)
+            add_task_to_queue(init.bot_config.allowed_user, f"{init.IMAGE_PATH}/sehua_daily_update.png", final_message)
         else:
-            add_task_to_queue(init.bot_config['allowed_user'], f"{init.IMAGE_PATH}/teacher_pto.jpg", final_message)
+            add_task_to_queue(init.bot_config.allowed_user, f"{init.IMAGE_PATH}/teacher_pto.jpg", final_message)
             return
     
     # 删除垃圾文件 创建strm文件
@@ -241,7 +241,7 @@ def sehua_success_proccesser(item, save_path, task, success_list):
         success_list[3] += 1
     
     # 发送通知
-    if init.bot_config.get('sehua_spider', {}).get('notify_me', False):
+    if init.bot_config.sehua_spider.notify_me:
             msg_av_number = escape_markdown(f"#{av_number}", version=2)
             msg_title = escape_markdown(title, version=2)
             msg_date = escape_markdown(publish_date, version=2)
@@ -274,9 +274,9 @@ def sehua_success_proccesser(item, save_path, task, success_list):
 **发布链接:** [点击查看详情]({pub_url})
                 """
             if not init.aria2_client:
-                add_task_to_queue(init.bot_config['allowed_user'], image_path, message)
+                add_task_to_queue(init.bot_config.allowed_user, image_path, message)
             else:
-                push2aria2(f"{save_path}/{task['name']}", init.bot_config['allowed_user'], image_path, message)
+                push2aria2(f"{save_path}/{task['name']}", init.bot_config.allowed_user, image_path, message)
             
 
 
@@ -303,9 +303,9 @@ def av_daily_offline():
     
     # 分批处理，每100个任务一批
     create_offline_url_list = create_offline_url(update_list)
-    save_path = init.bot_config.get('av_daily_update', {}).get('save_path', '/AV/日更')
+    save_path = init.bot_config.av_daily_update.save_path
     # 按年月分类存储
-    save_path = add_year_month_to_path(init.bot_config.get('av_daily_update', {}).get('sort_by_year_month', False), save_path)
+    save_path = add_year_month_to_path(init.bot_config.av_daily_update.sort_by_year_month, save_path)
     
     if create_offline_url_list:
         for offline_tasks in create_offline_url_list:
@@ -313,7 +313,7 @@ def av_daily_offline():
             offline2115(offline_tasks, len(update_list), save_path)
     else:
         init.logger.warn("AV日更离线任务未执行，可能是115离线配额不足，请检查115账号状态！")
-        add_task_to_queue(init.bot_config['allowed_user'], f"{init.IMAGE_PATH}/male023.png", "AV日更离线任务未执行，可能是115离线配额不足，请检查115账号状态！")
+        add_task_to_queue(init.bot_config.allowed_user, f"{init.IMAGE_PATH}/male023.png", "AV日更离线任务未执行，可能是115离线配额不足，请检查115账号状态！")
         return
     
     # 等待离线完成
@@ -348,7 +348,7 @@ def av_daily_offline():
         init.logger.info("失败的任务会在下次自动重试，请检查日志。")
         message += "\n失败的任务会在下次自动重试，请留意日志或通知！"
 
-    add_task_to_queue(init.bot_config['allowed_user'], f"{init.IMAGE_PATH}/av_daily_update.png", message)
+    add_task_to_queue(init.bot_config.allowed_user, f"{init.IMAGE_PATH}/av_daily_update.png", message)
     
     # 删除垃圾文件 创建strm文件
     init.openapi_115.auto_clean_all(save_path)
@@ -371,7 +371,7 @@ def av_daily_success_proccesser(item, task, save_path):
     init.logger.info(f"{item['av_number'].upper()} 离线下载完成！")
     
     # 发送通知
-    if init.bot_config.get('av_daily_update', {}).get('notify_me', False):
+    if init.bot_config.av_daily_update.notify_me:
         msg_av_number = escape_markdown(f"#{item['av_number'].upper()}", version=2)
         msg_title = escape_markdown(item['title'], version=2)
         msg_date = escape_markdown(item['publish_date'], version=2)
@@ -387,9 +387,9 @@ def av_daily_success_proccesser(item, task, save_path):
 **发布链接:** [点击查看详情]({pub_url})
 """     
         if not init.aria2_client:
-            add_task_to_queue(init.bot_config['allowed_user'], item['post_url'], message)
+            add_task_to_queue(init.bot_config.allowed_user, item['post_url'], message)
         else:
-            push2aria2(f"{save_path}/{task['name']}", init.bot_config['allowed_user'], item['post_url'], message)
+            push2aria2(f"{save_path}/{task['name']}", init.bot_config.allowed_user, item['post_url'], message)
 
 
 def offline2115(offline_tasks, task_count, save_path):
@@ -490,7 +490,7 @@ def push2aria2(save_path, user_id, cover_image, message):
         'path': save_path
     }
     
-    device_name = init.bot_config.get('aria2', {}).get('device_name', 'Aria2') or 'Aria2'
+    device_name = init.bot_config.aria2.device_name or 'Aria2'
     
     keyboard = [
         [InlineKeyboardButton(f"推送到{device_name}", callback_data=f"push2aria2_{push_task_id}")]
@@ -519,7 +519,7 @@ def t66y_offline():
         if offline_groups:
             for save_path, batches in offline_groups.items():
                 # 按年月分类存储
-                save_path = add_year_month_to_path(init.bot_config.get('rsshub', {}).get('t66y', {}).get('sort_by_year_month', False), save_path)
+                save_path = add_year_month_to_path(init.bot_config.rsshub.t66y.sort_by_year_month, save_path)
                 if save_path not in save_path_list:
                     save_path_list.append(save_path)
                 for batch_tasks in batches:
@@ -527,7 +527,7 @@ def t66y_offline():
                     offline2115(batch_tasks, task_count, save_path)
         else:
             init.logger.warn("t66y离线任务未执行，可能是115离线配额不足，请检查115账号状态！")
-            add_task_to_queue(init.bot_config['allowed_user'], f"{init.IMAGE_PATH}/male023.png", "t66y离线任务未执行，可能是115离线配额不足，请检查115账号状态！")
+            add_task_to_queue(init.bot_config.allowed_user, f"{init.IMAGE_PATH}/male023.png", "t66y离线任务未执行，可能是115离线配额不足，请检查115账号状态！")
             return
 
     # 等待离线完成
@@ -549,7 +549,7 @@ def t66y_offline():
     success_task = []
     for item in check_results:
         magnet = item['magnet']
-        save_path = add_year_month_to_path(init.bot_config.get('rsshub', {}).get('t66y', {}).get('sort_by_year_month', False), item['save_path'])
+        save_path = add_year_month_to_path(init.bot_config.rsshub.t66y.sort_by_year_month, item['save_path'])
         section_name = item.get('section_name', '未知板块')
         
         for task in offline_task_status:
@@ -580,9 +580,9 @@ def t66y_offline():
     if messages:
         final_message = "**t66y离线任务完成情况:**\n" + "\n".join(messages)
         if total_success > 0:
-            add_task_to_queue(init.bot_config['allowed_user'], f"{init.IMAGE_PATH}/rss_1024.jpg", final_message)
+            add_task_to_queue(init.bot_config.allowed_user, f"{init.IMAGE_PATH}/rss_1024.jpg", final_message)
         else:
-            add_task_to_queue(init.bot_config['allowed_user'], f"{init.IMAGE_PATH}/teacher_pto.jpg", final_message)
+            add_task_to_queue(init.bot_config.allowed_user, f"{init.IMAGE_PATH}/teacher_pto.jpg", final_message)
             
     # 删除垃圾文件
     for path in save_path_list:
@@ -613,7 +613,7 @@ def t66y_success_proccesser(item, save_path, task):
     init.logger.info(f"{title} 离线下载成功！")
     
     # 发送通知
-    if init.bot_config.get('rsshub', {}).get('t66y', {}).get('notify_me', False):
+    if init.bot_config.rsshub.t66y.notify_me:
         # 直接使用 movie_info
         message = movie_info
         
@@ -632,9 +632,9 @@ def t66y_success_proccesser(item, save_path, task):
             message = escape_markdown(message, version=2)
         
         if not init.aria2_client:
-            add_task_to_queue(init.bot_config['allowed_user'], poster_url, message)
+            add_task_to_queue(init.bot_config.allowed_user, poster_url, message)
         else:
-            push2aria2(f"{save_path}/{task['name']}", init.bot_config['allowed_user'], poster_url, message)
+            push2aria2(f"{save_path}/{task['name']}", init.bot_config.allowed_user, poster_url, message)
 
 
 def javbus_offline():
@@ -657,7 +657,7 @@ def javbus_offline():
         if offline_groups:
             for save_path, batches in offline_groups.items():
                 # 按年月分类存储
-                save_path = add_year_month_to_path(init.bot_config.get('rsshub', {}).get('javbus', {}).get('sort_by_year_month', False), save_path)
+                save_path = add_year_month_to_path(init.bot_config.rsshub.javbus.sort_by_year_month, save_path)
                 if save_path not in save_path_list:
                     save_path_list.append(save_path)
                 for batch_tasks in batches:
@@ -665,7 +665,7 @@ def javbus_offline():
                     offline2115(batch_tasks, task_count, save_path)
         else:
             init.logger.warn("JavBus离线任务未执行，可能是115离线配额不足，请检查115账号状态！")
-            add_task_to_queue(init.bot_config['allowed_user'], f"{init.IMAGE_PATH}/male023.png", "JavBus离线任务未执行，可能是115离线配额不足，请检查115账号状态！")
+            add_task_to_queue(init.bot_config.allowed_user, f"{init.IMAGE_PATH}/male023.png", "JavBus离线任务未执行，可能是115离线配额不足，请检查115账号状态！")
             return
 
     # 等待离线完成
@@ -679,7 +679,7 @@ def javbus_offline():
     total_offline = len(check_results)
     for item in check_results:
         magnet = item['magnet']
-        save_path = add_year_month_to_path(init.bot_config.get('rsshub', {}).get('javbus', {}).get('sort_by_year_month', False), item['save_path'])
+        save_path = add_year_month_to_path(init.bot_config.rsshub.javbus.sort_by_year_month, item['save_path'])
         image_path = item['poster_url']
         
         for task in offline_task_status:
@@ -701,9 +701,9 @@ def javbus_offline():
     # 生成汇总消息
     message = escape_markdown(f"JavBus订阅任务完成情况: {total_success}/{total_offline}", version=2) 
     if total_success > 0:
-        add_task_to_queue(init.bot_config['allowed_user'], f"{init.IMAGE_PATH}/rss_javbus.jpg", message)
+        add_task_to_queue(init.bot_config.allowed_user, f"{init.IMAGE_PATH}/rss_javbus.jpg", message)
     else:
-        add_task_to_queue(init.bot_config['allowed_user'], f"{init.IMAGE_PATH}/teacher_pto.jpg", message)
+        add_task_to_queue(init.bot_config.allowed_user, f"{init.IMAGE_PATH}/teacher_pto.jpg", message)
             
     # 删除垃圾文件
     for path in save_path_list:
@@ -734,23 +734,23 @@ def javbus_success_proccesser(item, save_path, task):
     init.logger.info(f"{title} 离线下载成功！")
     
     # 发送通知
-    if init.bot_config.get('rsshub', {}).get('javbus', {}).get('notify_me', False):
+    if init.bot_config.rsshub.javbus.notify_me:
         # 直接使用 movie_info
         message = movie_info
         if not init.aria2_client:
-            add_task_to_queue(init.bot_config['allowed_user'], poster_url, message)
+            add_task_to_queue(init.bot_config.allowed_user, poster_url, message)
         else:
-            push2aria2(f"{save_path}/{task['name']}", init.bot_config['allowed_user'], poster_url, message)
+            push2aria2(f"{save_path}/{task['name']}", init.bot_config.allowed_user, poster_url, message)
             
             
 def generate_strm_file(result):
-    strm_mode = init.bot_config.get('strm_mode', 'disable')
+    strm_mode = init.bot_config.strm_mode
     if strm_mode == 'disable':
         return
     
-    strm_root = init.bot_config.get('strm_root', '/media/115')
-    mount_root = init.bot_config.get('mount_root', '/CloudNAS/115')
-    openlist_root = init.bot_config.get('openlist_root', '/115')
+    strm_root = init.bot_config.strm_root
+    mount_root = init.bot_config.mount_root
+    openlist_root = init.bot_config.openlist_root
 
     for item in result:
         try:

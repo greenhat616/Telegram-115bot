@@ -3,7 +3,7 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, ConversationHandler, \
     MessageHandler, filters, CallbackQueryHandler
-import init
+from app import init
 import os
 import uuid
 from datetime import datetime
@@ -98,8 +98,8 @@ async def show_directory_selection(update: Update, context: ContextTypes.DEFAULT
         keyboard.append([InlineKeyboardButton(f"🚀 上次保存: {last_path}", callback_data=f"quick_last_{task_id}")])
         
     keyboard.extend([
-        [InlineKeyboardButton(f"📁 {category['display_name']}", callback_data=f"main_{category['name']}_{task_id}")] 
-        for category in init.bot_config['category_folder']
+        [InlineKeyboardButton(f"📁 {category.display_name}", callback_data=f"main_{category.name}_{task_id}")]
+        for category in init.bot_config.category_folder
     ])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -175,11 +175,11 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
         task_id = parts[2]
         
         sub_categories = [
-            item['path_map'] for item in init.bot_config["category_folder"] if item['name'] == category_name
+            item.path_map for item in init.bot_config.category_folder if item.name == category_name
         ][0]
 
         keyboard = [
-            [InlineKeyboardButton(f"📁 {category['name']}", callback_data=f"sub_{category['path']}_{task_id}")] 
+            [InlineKeyboardButton(f"📁 {category.name}", callback_data=f"sub_{category.path}_{task_id}")] 
             for category in sub_categories
         ]
         keyboard.append([InlineKeyboardButton("返回", callback_data=f"back_{task_id}")])
@@ -222,7 +222,7 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
                 except Exception as e:
                     init.logger.error(f"获取Bot信息失败: {e}")
                     # 回退到配置文件
-                    entity = init.bot_config.get('bot_name')
+                    entity = init.bot_config.bot_name
             else:
                 # 群组情况，直接用 chat_id
                 entity = video_info['chat_id']
@@ -301,8 +301,8 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
             keyboard.append([InlineKeyboardButton(f"🚀 上次保存: {last_path}", callback_data=f"quick_last_{task_id}")])
             
         keyboard.extend([
-            [InlineKeyboardButton(f"📁 {category['display_name']}", callback_data=f"main_{category['name']}_{task_id}")] 
-            for category in init.bot_config['category_folder']
+            [InlineKeyboardButton(f"📁 {category.display_name}", callback_data=f"main_{category.name}_{task_id}")]
+            for category in init.bot_config.category_folder
         ])
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text("❓请选择要保存到哪个分类：", reply_markup=reply_markup)

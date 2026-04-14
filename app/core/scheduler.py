@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-import init
+from app import init
 import threading
 import time
 from datetime import datetime, timedelta
@@ -18,8 +18,8 @@ def get_sync_time(category):
     sync_time = {'hour': 3, 'minute': 0}  # 默认时间03:00
     if category == "sehua":
         # 使用 or {} 处理配置项为 None 的情况，避免 AttributeError
-        sehua_config = init.bot_config.get("sehua_spider") or {}
-        sehua_sync_time = sehua_config.get("sync_time", "03:00")
+        sehua_config = init.bot_config.sehua_spider
+        sehua_sync_time = sehua_config.sync_time
         try:
             hour, minute = map(int, sehua_sync_time.split(":"))
             sync_time['hour'] = hour
@@ -30,8 +30,8 @@ def get_sync_time(category):
     
     if category == "jav":
         # 使用 or {} 处理配置项为 None 的情况，避免 AttributeError
-        jav_config = init.bot_config.get("av_daily_update") or {}
-        jav_sync_time = jav_config.get("sync_time", "20:00")
+        jav_config = init.bot_config.av_daily_update
+        jav_sync_time = jav_config.sync_time
         try:
             hour, minute = map(int, jav_sync_time.split(":"))
             sync_time['hour'] = hour

@@ -2,7 +2,7 @@
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, ConversationHandler, CallbackQueryHandler
-import init
+from app import init
 import asyncio
 import shutil
 from pathlib import Path
@@ -23,8 +23,8 @@ async def sync_strm_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 显示主分类（电影/剧集）
     keyboard = [
-        [InlineKeyboardButton(f"📁 {category['display_name']}", callback_data=category['name'])] for category in
-        init.bot_config['category_folder']
+        [InlineKeyboardButton(f"📁 {category.display_name}", callback_data=category.name)] for category in
+        init.bot_config.category_folder
     ]
     # 添加退出按钮
     keyboard.append([InlineKeyboardButton("退出", callback_data="quit")])
@@ -42,8 +42,8 @@ async def select_main_category_sync(update: Update, context: ContextTypes.DEFAUL
     if selected_main_category == "return":
         # 显示主分类
         keyboard = [
-            [InlineKeyboardButton(f"📁 {category['display_name']}", callback_data=category['name'])]
-            for category in init.bot_config['category_folder']
+            [InlineKeyboardButton(f"📁 {category.display_name}", callback_data=category.name)]
+            for category in init.bot_config.category_folder
         ]
         keyboard.append([InlineKeyboardButton("退出", callback_data="quit")])
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -57,12 +57,12 @@ async def select_main_category_sync(update: Update, context: ContextTypes.DEFAUL
     else:
         context.user_data["selected_main_category"] = selected_main_category
         sub_categories = [
-            item['path_map'] for item in init.bot_config["category_folder"] if item['name'] == selected_main_category
+            item.path_map for item in init.bot_config.category_folder if item.name == selected_main_category
         ][0]
 
         # 创建子分类按钮
         keyboard = [
-            [InlineKeyboardButton(f"📁 {category['name']}", callback_data=category['path'])] for category in sub_categories
+            [InlineKeyboardButton(f"📁 {category.name}", callback_data=category.path)] for category in sub_categories
         ]
         keyboard.append([InlineKeyboardButton("退出", callback_data="quit")])
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -77,12 +77,12 @@ async def select_sub_category_sync(update: Update, context: ContextTypes.DEFAULT
     selected_path = query.data
     if selected_path == "quit":
         return await quit_conversation(update, context)
-    mount_root = Path(init.bot_config['mount_root'], "/CloudNAS/115")
-    strm_root = Path(init.bot_config['strm_root'], "/media/115")
-    openlist_root = Path(init.bot_config['openlist_root'], "/115")
+    mount_root = Path(init.bot_config.mount_root)
+    strm_root = Path(init.bot_config.strm_root)
+    openlist_root = Path(init.bot_config.openlist_root)
     init.logger.debug(f"selected_path: {selected_path}")
     try:
-        strm_mode = init.bot_config.get("strm_mode", "disable")
+        strm_mode = init.bot_config.strm_mode
         if strm_mode == "disable":
             await query.edit_message_text(text="⚠️ 当前strm同步功能已禁用！")
             return ConversationHandler.END

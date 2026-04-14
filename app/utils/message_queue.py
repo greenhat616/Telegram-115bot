@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import asyncio
-import init
+from app import init
 from telegram import Bot
 from telegram.helpers import escape_markdown
 

@@ -7,26 +7,26 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 sys.path.append(current_dir)
 from app.utils.http_client import http_request_long
-import init
+from app import init
 
 def check_ai_api_available():
-    url = init.bot_config.get("ai", {}).get("api_url", "")
+    url = init.bot_config.ai.api_url
     if not url:
         init.logger.warn("AI API URL 未定义.")
         return False
-    model = init.bot_config.get("ai", {}).get("model", "")
+    model = init.bot_config.ai.model
     if not model:
         init.logger.warn("AI 模型未定义.")
         return False
-    
-    api_key = init.bot_config.get("ai", {}).get("api_key", "")
+
+    api_key = init.bot_config.ai.api_key
     if not api_key:
         init.logger.warn("AI API Key 未定义.")
         return False
     return True
 
 def chat_completion(tip_words, max_tokens=8192):
-    url = init.bot_config.get("ai").get("api_url")
+    url = init.bot_config.ai.api_url
     # 智能判断是否需要拼接 /chat/completions
     # 如果URL中不包含 chat/completions 也不包含 messages (适配Anthropic风格)，且不以 / 结尾，则尝试拼接
     if "chat/completions" not in url and "messages" not in url:
@@ -34,14 +34,14 @@ def chat_completion(tip_words, max_tokens=8192):
             url = url[:-1] + "/chat/completions"
         else:
             url = url + "/chat/completions"
-            
+
     payload = {
-        "model": init.bot_config.get("ai").get("model"),
+        "model": init.bot_config.ai.model,
         "messages": [{"role": "user", "content": tip_words}],
         "max_tokens": max_tokens
     }
     headers = {
-        "Authorization": f"Bearer {init.bot_config.get('ai').get('api_key')}",
+        "Authorization": f"Bearer {init.bot_config.ai.api_key}",
         "Content-Type": "application/json"
     }
 

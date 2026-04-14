@@ -1,6 +1,6 @@
 from telegram import Update
 from telegram.ext import ContextTypes, CommandHandler
-import init
+from app import init
 import datetime
 import threading
 

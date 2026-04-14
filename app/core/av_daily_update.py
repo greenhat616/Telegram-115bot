@@ -1,13 +1,13 @@
 import httpx
-from app.utils.sqlitelib import *
+from app.utils.sqlitelib import SqlLiteLib
 import datetime
 from bs4 import BeautifulSoup
-import init
+from app import init
 import time
 import re
 from app.utils.message_queue import add_task_to_queue
 from app.utils.http_client import http_request
-from offline_task_retry import av_daily_offline
+from app.core.offline_task_retry import av_daily_offline
 
 
 def get_max_page(html_content):    
@@ -190,7 +190,7 @@ def save_av_daily_update2db(results):
             
 def av_daily_update():
     # 检查配置是否启用AV日更
-    if not init.bot_config.get('av_daily_update', {}).get('enable', False):
+    if not init.bot_config.av_daily_update.enable:
         init.logger.info("AV日更功能未启用，跳过更新。")
         return
     

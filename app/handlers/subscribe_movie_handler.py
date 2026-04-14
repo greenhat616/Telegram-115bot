@@ -4,11 +4,11 @@ import asyncio
 import re
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, ConversationHandler
-import init
+from app import init
 from warnings import filterwarnings
 from telegram.warnings import PTBUserWarning
 from app.core.subscribe_movie import get_tmdb_id
-from app.utils.sqlitelib import *
+from app.utils.sqlitelib import SqlLiteLib
 from telegram.helpers import escape_markdown
 
 
@@ -24,8 +24,8 @@ async def subscribe_moive(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not init.check_user(usr_id):
         await update.message.reply_text("⚠️ 对不起，您无权使用115机器人！")
         return ConversationHandler.END
-    if init.bot_config.get("x_app_id", "") == "your_app_id" or init.bot_config.get("x_app_id", "") == "" \
-        or init.bot_config.get("x_api_key", "") == "your_api_key" or init.bot_config.get("x_api_key", "") == "":
+    if init.bot_config.x_app_id == "your_app_id" or init.bot_config.x_app_id == "" or init.bot_config.x_app_id is None \
+        or init.bot_config.x_api_key == "your_api_key" or init.bot_config.x_api_key == "" or init.bot_config.x_api_key is None:
         await update.message.reply_text("⚠️ 请先取得nullbrAPI接口的授权才能使用电影订阅功能！\n申请方法见配置文件。")
         return ConversationHandler.END
 
@@ -51,12 +51,12 @@ async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYP
     else:
         context.user_data["selected_main_category"] = selected_main_category
         sub_categories = [
-            item['path_map'] for item in init.bot_config["category_folder"] if item['name'] == selected_main_category
+            item.path_map for item in init.bot_config.category_folder if item.name == selected_main_category
         ][0]
 
         # 创建子分类按钮
         keyboard = [
-            [InlineKeyboardButton(f"📁 {category['name']}", callback_data=category['path'])] for category in sub_categories
+            [InlineKeyboardButton(f"📁 {category.name}", callback_data=category.path)] for category in sub_categories
         ]
         keyboard.append([InlineKeyboardButton("取消", callback_data="cancel")])
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -148,8 +148,8 @@ async def add_subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # 显示主分类（电影分类）
     keyboard = [
-        [InlineKeyboardButton(f"📁 {category['display_name']}", callback_data=category['name'])]
-        for category in init.bot_config['category_folder']
+        [InlineKeyboardButton(f"📁 {category.display_name}", callback_data=category.name)]
+        for category in init.bot_config.category_folder
     ]
     keyboard.append([InlineKeyboardButton("取消", callback_data="cancel")])
     reply_markup = InlineKeyboardMarkup(keyboard)

@@ -2,7 +2,7 @@
 
 from telegram import Update
 from telegram.ext import CommandHandler, ConversationHandler, ContextTypes
-import init
+from app import init
 import os
 
 
@@ -18,7 +18,7 @@ async def auth_pkce_115(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if os.path.exists(init.TOKEN_FILE):
                 os.remove(init.TOKEN_FILE)
             await update.message.reply_text("⏳ 正在发起授权，请稍候...")
-            await asyncio.to_thread(init.openapi_115.auth_pkce, usr_id, init.bot_config['115_app_id'])
+            await asyncio.to_thread(init.openapi_115.auth_pkce, usr_id, init.bot_config.app_115_id)
             if init.openapi_115.access_token and init.openapi_115.refresh_token:
                 await update.message.reply_text("✅ 授权成功！")
             else:
@@ -32,7 +32,7 @@ async def auth_pkce_115(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def check_115_app_id():
-    api_key = str(init.bot_config.get('115_app_id'))
+    api_key = str(init.bot_config.app_115_id)
     if api_key is None or api_key.strip() == "" or api_key.strip().lower() == "your_115_app_id":
         init.logger.error("115 Open APPID未配置!")
         return False

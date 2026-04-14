@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
 
 import sqlite3
-import init
-from typing import Optional
+from app import init
+from typing import Optional, TypeVar
+
+from pydantic import BaseModel
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class SqlLiteLib:
@@ -62,6 +66,29 @@ class SqlLiteLib:
             return res if res else None
         except Exception as e:
             self.logger.error(f"执行查询时发生错误: {e}, sql: {sql}")
+
+    def query_row_dict(self, sql: str, params=None) -> dict | None:
+        """查询单行，返回字典"""
+        try:
+            self.cursor.execute(sql, params or ())
+            res = self.cursor.fetchone()
+            if res is None:
+                return None
+            columns = [description[0] for description in self.cursor.description]
+            return dict(zip(columns, res))
+        except Exception as e:
+            self.logger.error(f"执行查询时发生错误: {e}, sql: {sql}")
+            return None
+
+    def query_as(self, model: type[T], sql: str, params: tuple = ()) -> list[T]:
+        """查询并返回 Pydantic 模型列表"""
+        rows = self.query_all(sql, params)
+        return [model.model_validate(row) for row in rows]
+
+    def query_one_as(self, model: type[T], sql: str, params: tuple = ()) -> T | None:
+        """查询单行并返回 Pydantic 模型"""
+        row = self.query_row_dict(sql, params)
+        return model.model_validate(row) if row else None
 
     def close(self):
         if self.cursor is not None:

@@ -5,10 +5,10 @@ current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 sys.path.append(current_dir)
-import init
+from app import init
 import datetime
-from app.utils.sqlitelib import *
-from app.utils.utils import *
+from app.utils.sqlitelib import SqlLiteLib
+from app.utils.utils import date_convert2BJT, get_magnet_hash
 from datetime import datetime, timedelta, date
 import yaml
 import os
@@ -234,37 +234,37 @@ async def start_t66y_rss_async(section_name):
     browser = None
     try:
         # Initialize browser
-        rss_host = init.bot_config.get('rsshub', {}).get('rss_host', '')
+        rss_host = init.bot_config.rsshub.rss_host
         browser = SeleniumBrowser(rss_host)
         await browser.init_browser()
-        
+
         if not browser.driver:
              init.logger.error("浏览器初始化失败，无法继续任务！")
-             add_task_to_queue(init.bot_config['allowed_user'], None, f"❌ 浏览器初始化失败，无法继续任务！")
+             add_task_to_queue(init.bot_config.allowed_user, None, f"❌ 浏览器初始化失败，无法继续任务！")
              return
-         
-        t66y = init.bot_config.get("rsshub", {}).get("t66y", {})
 
-        for section in t66y.get("sections", []):
-            if section_name and section.get("name", "") != section_name:
+        t66y = init.bot_config.rsshub.t66y
+
+        for section in t66y.sections:
+            if section_name and section.name != section_name:
                 continue
-            section_id = get_section_id(section.get("name", ""))
+            section_id = get_section_id(section.name)
             if section_id == 0:
-                init.logger.warning(f"未知的t66y版块名称: {section.get('name', '')}，跳过该版块的RSS订阅")
+                init.logger.warning(f"未知的t66y版块名称: {section.name}，跳过该版块的RSS订阅")
                 continue
             rss_url = f"{rss_host.rstrip('/')}/t66y/{section_id}/today?format=json"
-            response = http_request("GET", rss_url, timeout=init.bot_config.get("rsshub", {}).get("t66y", {}).get("timeout", 60))
+            response = http_request("GET", rss_url, timeout=init.bot_config.rsshub.t66y.timeout)
             if response.status_code != 200:
                 init.logger.error(f"无法获取t66y RSS订阅，HTTP状态码: {response.status_code}")
                 continue
             pares_results = []
             rss_data = response.json()
-            pares_results.extend(await pares_t66y_rss(rss_data, section.get("name", ""), section.get("save_path", ""), browser))
+            pares_results.extend(await pares_t66y_rss(rss_data, section.name, section.save_path, browser))
             # Insert into database
             save2DB_t66y(pares_results)
     except Exception as e:
         init.logger.error(f"处理t66y RSS订阅时出错: {e}")
-        add_task_to_queue(init.bot_config['allowed_user'], None, f"❌ 处理t66y RSS订阅时出错: {e}")
+        add_task_to_queue(init.bot_config.allowed_user, None, f"❌ 处理t66y RSS订阅时出错: {e}")
     finally:
         if browser:
             await browser.close()

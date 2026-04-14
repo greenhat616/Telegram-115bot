@@ -7,13 +7,13 @@ sys.path.append(current_dir)
 import httpx
 from bs4 import BeautifulSoup
 from telegram.helpers import escape_markdown
-import init
+from app import init
 import asyncio
 import json
 import re
 from app.utils.http_client import http_request
 from app.core.offline_task_retry import javbus_offline
-from app.utils.sqlitelib import *
+from app.utils.sqlitelib import SqlLiteLib
 from concurrent.futures import ThreadPoolExecutor
 from app.utils.utils import check_magnet, clean_magnet
 
@@ -22,8 +22,9 @@ sem = asyncio.Semaphore(5)
 # 全局线程池
 executor = ThreadPoolExecutor(max_workers=10)
 
-# 最大订阅数量
-max_subscribe = init.bot_config.get("rsshub", {}).get("javbus", {}).get("max_subscribe", 0)
+# 最大订阅数量（延迟访问，避免模块加载时 bot_config 为 None）
+def _get_max_subscribe() -> int:
+    return init.bot_config.rsshub.javbus.max_subscribe if init.bot_config else 0
 
 async def rss_javbus(sub_category, rss_url, user_input):
     page = 1
@@ -58,16 +59,16 @@ async def rss_javbus(sub_category, rss_url, user_input):
                 
             # 异步解析本页内容并入库
             limit = 0
-            if max_subscribe > 0:
-                limit = max_subscribe - total_success_count
+            if _get_max_subscribe() > 0:
+                limit = _get_max_subscribe() - total_success_count
                 if limit <= 0:
                     break
                 
                 # 串行等待，以便控制数量
                 count = await parse_items(sub_category, items, page, user_input, limit)
                 total_success_count += count
-                if total_success_count >= max_subscribe:
-                    init.logger.info(f"已达到最大订阅数量 {max_subscribe}，停止抓取。")
+                if total_success_count >= _get_max_subscribe():
+                    init.logger.info(f"已达到最大订阅数量 {_get_max_subscribe()}，停止抓取。")
                     break
             else:
                 # 不阻塞下一页的抓取
@@ -90,7 +91,7 @@ async def rss_javbus(sub_category, rss_url, user_input):
             init.logger.info(f"[{sub_category}]第 {i+1} 页解析成功: {res} 条")
         total_count = sum(results)
         init.logger.info(f"所有任务已完成。共解析成功 {total_count} 条资源。")
-    elif max_subscribe > 0:
+    elif _get_max_subscribe() > 0:
         init.logger.info(f"所有任务已完成。共解析成功 {total_success_count} 条资源。")
         
     # 离线到115
@@ -103,7 +104,7 @@ async def get_content_from_rssurl(rss_url):
         # 使用 run_in_executor 将同步的 requests 调用转换为异步
         response = await loop.run_in_executor(
             executor, 
-            lambda: http_request("GET", rss_url, timeout=init.bot_config.get("rsshub", {}).get("timeout", 60))
+            lambda: http_request("GET", rss_url, timeout=init.bot_config.rsshub.javbus.timeout)
         )
         response.raise_for_status()
         return response.text
@@ -384,11 +385,11 @@ async def process_single_item(sub_category, item, user_input):
             return 0
     
 def get_save_path(sub_category, user_input):
-    category_list= init.bot_config.get("rsshub", {}).get("javbus", {}).get("category", [])
+    category_list = init.bot_config.rsshub.javbus.category
     save_path = ""
     for category in category_list:
-        if category.get("name") == sub_category:
-            save_path = category.get("save_path", f"/AV/JavBus/{sub_category}")
+        if category.name == sub_category:
+            save_path = category.save_path or f"/AV/JavBus/{sub_category}"
             if sub_category != "最新" and user_input:
                 safe_input = re.sub(r'[\\/*?:"<>|]', "_", user_input)
                 return os.path.join(save_path, safe_input)

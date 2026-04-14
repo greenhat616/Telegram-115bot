@@ -6,7 +6,7 @@ import math
 from datetime import datetime
 from pathlib import Path
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-import init
+from app import init
 from app.utils.fast_telethon import download_file_parallel
 
 class VideoDownloadManager:
