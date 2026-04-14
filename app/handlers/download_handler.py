@@ -630,8 +630,9 @@ def register_download_handlers(application):
     # 添加独立的回调处理器处理异步任务的后续操作
     application.add_handler(CallbackQueryHandler(handle_manual_rename_callback, pattern=r"^rename_"))
     application.add_handler(CallbackQueryHandler(handle_retry_callback, pattern=r"^retry_"))
-    application.add_handler(CallbackQueryHandler(handle_cancel_callback, pattern=r"^cancel_"))
+    # cancel_download$ 必须在 cancel_ 之前注册，否则会被 cancel_ 匹配吞掉
     application.add_handler(CallbackQueryHandler(handle_download_failure, pattern=r"^cancel_download$"))
+    application.add_handler(CallbackQueryHandler(handle_cancel_callback, pattern=r"^cancel_\d+$"))
     
     application.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND & ~filters.Regex(r'^(magnet:|ed2k://|ED2K://|thunder://|http://|https://)'), 
