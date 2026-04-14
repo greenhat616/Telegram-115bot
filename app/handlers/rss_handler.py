@@ -233,6 +233,7 @@ def register_rss_handlers(application):
             RSS_WAIT_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, rss_handle_input)],
         },
         fallbacks=[CommandHandler("q", quit_conversation)],
+        conversation_timeout=300,
     )
     application.add_handler(download_command_handler)
     init.logger.info("✅ RSS处理器已注册")

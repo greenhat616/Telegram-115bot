@@ -315,6 +315,7 @@ def register_subscribe_movie_handlers(application):
             SELECT_SUB_CATEGORY: [CallbackQueryHandler(select_sub_category)]
         },
         fallbacks=[CommandHandler("q", quit_conversation)],
+        conversation_timeout=300,
     )
     application.add_handler(sub_movie_handler)
     init.logger.info("✅ Subscribe Movie处理器已注册")

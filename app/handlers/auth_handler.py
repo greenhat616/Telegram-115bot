@@ -53,6 +53,7 @@ def register_auth_handlers(application):
         entry_points=[CommandHandler("auth", auth_pkce_115)],
         states={},  # 添加空的states字典
         fallbacks=[CommandHandler("q", quit_conversation)],
+        conversation_timeout=600,
     )
     application.add_handler(auth_handler)
     init.logger.info("✅ Auth处理器已注册")

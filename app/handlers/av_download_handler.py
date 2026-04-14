@@ -437,6 +437,7 @@ def register_av_download_handlers(application):
             SELECT_SUB_CATEGORY: [CallbackQueryHandler(select_sub_category)]
         },
         fallbacks=[CommandHandler("q", quit_conversation)],
+        conversation_timeout=300,
     )
     application.add_handler(download_handler)
     init.logger.info("✅ AV Downloader处理器已注册")

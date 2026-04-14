@@ -165,7 +165,8 @@ def register_sync_handlers(application):
             SELECT_SUB_CATEGORY_SYNC: [CallbackQueryHandler(select_sub_category_sync)],
         },
         fallbacks=[CommandHandler("q", quit_conversation)],
-        per_chat=True
+        per_chat=True,
+        conversation_timeout=300,
     )
     application.add_handler(sync_handler)
     init.logger.info("✅ Sync处理器已注册")

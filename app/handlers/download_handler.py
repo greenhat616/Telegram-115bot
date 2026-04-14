@@ -623,6 +623,7 @@ def register_download_handlers(application):
             SELECT_SUB_CATEGORY: [CallbackQueryHandler(select_sub_category)]
         },
         fallbacks=[CommandHandler("q", quit_conversation)],
+        conversation_timeout=300,
     )
     application.add_handler(download_command_handler)
     
