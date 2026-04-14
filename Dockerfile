@@ -31,19 +31,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fi \
     && rm -rf /var/lib/apt/lists/*
 
+# 3. 安装 uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 WORKDIR /app
 
-# 3. 安装 Python 依赖
-COPY requirements.txt /app/
-RUN pip install --upgrade pip --no-cache-dir && \
-    pip install -r requirements.txt --no-cache-dir && \
+# 4. 安装 Python 依赖 (先复制锁文件以利用 Docker 缓存)
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project --no-dev && \
     # 针对 amd64 安装 Chrome driver (arm64 使用 apt 安装的 chromium-driver)
-    if [ "$(dpkg --print-architecture)" = "amd64" ]; then seleniumbase install chromedriver; fi
+    if [ "$(dpkg --print-architecture)" = "amd64" ]; then uv run seleniumbase install chromedriver; fi
 
-ADD ./app .
+# 5. 复制项目源码并安装项目本身
+COPY ./app ./app
+RUN uv sync --frozen --no-dev
 
-# 4. 设置路径
-ENV PYTHONPATH="/app:/app/utils:/app/core:/app/handlers:/app/.."
-
-# 5. 启动命令
-CMD ["python", "115bot.py"]
+# 6. 启动命令
+CMD ["uv", "run", "telegram-115bot"]

@@ -2,7 +2,6 @@
 
 import os
 import yaml
-import sys
 import shutil
 import subprocess
 from typing import Optional
@@ -10,22 +9,8 @@ from telethon import TelegramClient
 from app.core.open_115 import OpenAPI_115
 
 
-# 模块路径现在通过 Dockerfile 中的 PYTHONPATH 环境变量设置
-# 为了兼容本地开发，添加后备路径设置
-def _ensure_module_paths():
-    """
-    确保模块路径可用，主要用于本地开发环境
-    在 Docker 环境中，PYTHONPATH 已通过环境变量设置
-    """
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    required_paths = [current_dir, os.path.dirname(current_dir)]
-    
-    for path in required_paths:
-        if path not in sys.path:
-            sys.path.insert(0, path)
 
-# 执行路径检查
-_ensure_module_paths()
+
 
 from app.utils.logger import Logger
 from app.utils.sqlitelib import *

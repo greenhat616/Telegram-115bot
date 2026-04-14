@@ -1,13 +1,19 @@
 FROM 115bot:base
 LABEL authors="qiqiandfei"
 
-# 设置工作目录
+# 安装 uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 WORKDIR /app
 
-# 复制app下所有文件到/app
-ADD ./app .
+# 复制锁文件和项目配置
+COPY pyproject.toml uv.lock ./
 
-# 设置Python模块搜索路径，包含所有需要的目录
-ENV PYTHONPATH="/app:/app/utils:/app/core:/app/handlers:/app/.."
+# 安装依赖
+RUN uv sync --frozen --no-install-project --no-dev
 
-CMD ["python", "115bot.py"]
+# 复制项目源码并安装项目本身
+COPY ./app ./app
+RUN uv sync --frozen --no-dev
+
+CMD ["uv", "run", "telegram-115bot"]

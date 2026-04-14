@@ -185,7 +185,7 @@ async def post_init(application):
     await set_bot_menu(application)
 
 
-if __name__ == '__main__':
+def main():
     init.init()
     # 启动消息队列
     message_thread = threading.Thread(target=start_async_loop, daemon=True)
@@ -218,13 +218,13 @@ if __name__ == '__main__':
     # 重载配置
     reload_handler = CommandHandler('reload', reload)
     application.add_handler(reload_handler)
-    
+
     # 初始化115open对象
     if not init.initialize_115open():
         init.logger.error("115 OpenAPI客户端初始化失败，程序无法继续运行！")
         add_task_to_queue(
-            init.bot_config['allowed_user'], 
-            f"{init.IMAGE_PATH}/male023.png", 
+            init.bot_config['allowed_user'],
+            f"{init.IMAGE_PATH}/male023.png",
             message="❌ 115 OpenAPI客户端初始化失败，程序无法继续运行！\n请检查Token或115 AppID设置是否正确！"
         )
         # 等待消息队列处理完毕再退出
@@ -238,7 +238,7 @@ if __name__ == '__main__':
     register_auth_handlers(application)
     # 注册下载
     register_download_handlers(application)
-    # 注册电影订阅 
+    # 注册电影订阅
     register_subscribe_movie_handlers(application)
     # 注册AV下载
     register_av_download_handlers(application)
@@ -254,7 +254,7 @@ if __name__ == '__main__':
     register_sync_handlers(application)
     # 注册视频
     register_video_handlers(application)
-    
+
     init.logger.info(f"USER_AGENT: {init.USER_AGENT}")
 
     # 启动机器人轮询
@@ -275,3 +275,7 @@ if __name__ == '__main__':
         init.logger.error(f"程序遇到错误：{str(e)}\n{error_details}")
     finally:
         init.logger.info("机器人已停止运行。")
+
+
+if __name__ == '__main__':
+    main()
