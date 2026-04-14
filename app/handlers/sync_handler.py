@@ -3,6 +3,7 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, ConversationHandler, CallbackQueryHandler
 import init
+import asyncio
 import shutil
 from pathlib import Path
 from warnings import filterwarnings
@@ -91,8 +92,8 @@ async def select_sub_category_sync(update: Update, context: ContextTypes.DEFAULT
             shutil.rmtree(str(sync_path))
 
         await query.edit_message_text(text=f"🔄[{selected_path}]正在同步strm文件，请稍后...")
-        # 获取视频文件列表
-        video_files = init.openapi_115.get_sync_dir(selected_path)
+        # 获取视频文件列表（移至线程池避免阻塞主事件循环）
+        video_files = await asyncio.to_thread(init.openapi_115.get_sync_dir, selected_path)
         for file in video_files:
             try:
                 # file = "FC2-PPV-4750727/hhd800.com@FC2-PPV-4750727.mp4"

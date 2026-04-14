@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import asyncio
 import re
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, ConversationHandler
@@ -131,8 +132,8 @@ async def subscribe_operate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def add_subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     usr_id = update.message.from_user.id
     movie_name = update.message.text
-    # 先检查电影是否存在于TMDB
-    tmdb_id = get_tmdb_id(movie_name)
+    # 先检查电影是否存在于TMDB（移至线程池避免阻塞主事件循环）
+    tmdb_id = await asyncio.to_thread(get_tmdb_id, movie_name)
     if tmdb_id is None:
         await context.bot.send_message(
             chat_id=update.effective_chat.id, 

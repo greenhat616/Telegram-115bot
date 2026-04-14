@@ -6,6 +6,7 @@ from telegram.ext import ContextTypes, CommandHandler, ConversationHandler, \
 from telegram.error import TelegramError
 from telegram.helpers import escape_markdown
 import init
+import asyncio
 import re
 import time
 from pathlib import Path
@@ -465,63 +466,75 @@ async def handle_cancel_callback(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text("✅ 重命名操作已取消！")
 
 
+def _sync_rename_and_process(new_resource_name, rename_data):
+    """在工作线程中执行重命名及后续处理（同步阻塞操作）"""
+    final_path = rename_data["final_path"]
+    selected_path = rename_data["selected_path"]
+    download_url = rename_data["link"]
+
+    # 执行重命名
+    init.openapi_115.rename(final_path, new_resource_name)
+
+    # 构建新的路径
+    new_final_path = f"{selected_path}/{new_resource_name}"
+
+    # 获取文件列表并创建STRM文件
+    file_list = init.openapi_115.get_files_from_dir(new_final_path)
+    create_strm_file(new_final_path, file_list)
+
+    # 获取封面
+    cover_url = get_movie_cover(new_resource_name)
+
+    # 检查是否为订阅内容
+    from app.core.subscribe_movie import is_subscribe, update_subscribe
+    is_sub = is_subscribe(new_resource_name)
+    if is_sub:
+        update_subscribe(new_resource_name, cover_url, download_url)
+
+    # 通知Emby扫库
+    is_noticed = notice_emby_scan_library(new_final_path)
+
+    return new_final_path, cover_url, is_sub, is_noticed
+
 async def handle_manual_rename(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """处理手动重命名（通过独立的消息处理器）"""
     # 检查用户是否有待处理的重命名数据
     rename_data = context.user_data.get("rename_data")
     if not rename_data:
         return
-    
+
     try:
         new_resource_name = update.message.text.strip()
-        
+
         # 获取重命名所需的数据
         old_resource_name = rename_data["resource_name"]
         selected_path = rename_data["selected_path"]
         download_url = rename_data["link"]
         add2retry = rename_data["add2retry"]
-        
+
         # 添加到重试列表
         if add2retry:
             save_failed_download_to_db(
-                new_resource_name, 
-                download_url, 
+                new_resource_name,
+                download_url,
                 selected_path
             )
             await context.bot.send_message(chat_id=update.effective_chat.id, text="✅ 已将失败任务添加到重试列表，系统将自动重试！")
             context.user_data.pop("rename_data", None)
             return
 
-        final_path = rename_data["final_path"]
-        # 执行重命名
-        init.openapi_115.rename(final_path, new_resource_name)
-        
-        # 构建新的路径
-        new_final_path = f"{selected_path}/{new_resource_name}"
-        
-        # 获取文件列表并创建STRM文件
-        file_list = init.openapi_115.get_files_from_dir(new_final_path)
-        create_strm_file(new_final_path, file_list)
-        
-        # 发送封面图片（如果有的话）
-        cover_url = ""
-        
-        # 根据分类获取封面
-        cover_url = get_movie_cover(new_resource_name)
-        
-        # 检查是否为订阅内容
-        from app.core.subscribe_movie import is_subscribe, update_subscribe
-        if is_subscribe(new_resource_name):
-            # 更新订阅信息
-            update_subscribe(new_resource_name, cover_url, download_url)
+        # 移至线程池执行同步阻塞操作，避免卡死主事件循环
+        new_final_path, cover_url, is_sub, is_noticed = await asyncio.to_thread(
+            _sync_rename_and_process, new_resource_name, rename_data
+        )
+
+        if is_sub:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text=f"💡订阅影片`{new_resource_name}`已手动下载成功\\！",
                 parse_mode='MarkdownV2'
             )
-        
-        # 通知Emby扫库
-        is_noticed = notice_emby_scan_library(new_final_path)
+
         if is_noticed:
             message = f"✅ 重命名成功：`{new_resource_name}`\n\n**👻 已通知Emby扫库，请稍后确认！**"
         else:
@@ -529,11 +542,11 @@ async def handle_manual_rename(update: Update, context: ContextTypes.DEFAULT_TYP
         if cover_url:
             try:
                 init.logger.info(f"cover_url: {cover_url}")
-                
+
                 if not init.aria2_client:
                     await context.bot.send_photo(
-                        chat_id=update.effective_chat.id, 
-                        photo=cover_url, 
+                        chat_id=update.effective_chat.id,
+                        photo=cover_url,
                         caption=message,
                         parse_mode='MarkdownV2'
                     )
@@ -554,11 +567,11 @@ async def handle_manual_rename(update: Update, context: ContextTypes.DEFAULT_TYP
             else:
                 # 推送到aria2
                 push2aria2(new_final_path, cover_url, message, update.effective_chat.id)
-        
+
         # 清除重命名数据，结束当前操作
         context.user_data.pop("rename_data", None)
         init.logger.info(f"重命名操作完成：{old_resource_name} -> {new_resource_name}")
-        
+
     except Exception as e:
         init.logger.error(f"重命名处理失败: {e}")
         await context.bot.send_message(

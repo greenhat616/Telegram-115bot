@@ -11,12 +11,14 @@ import os
 
 
 async def auth_pkce_115(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    import asyncio
     usr_id = update.message.from_user.id
     if init.check_user(usr_id):
         if check_115_app_id():
             if os.path.exists(init.TOKEN_FILE):
                 os.remove(init.TOKEN_FILE)
-            init.openapi_115.auth_pkce(usr_id, init.bot_config['115_app_id'])
+            await update.message.reply_text("⏳ 正在发起授权，请稍候...")
+            await asyncio.to_thread(init.openapi_115.auth_pkce, usr_id, init.bot_config['115_app_id'])
             if init.openapi_115.access_token and init.openapi_115.refresh_token:
                 await update.message.reply_text("✅ 授权成功！")
             else:

@@ -1,6 +1,7 @@
 from telegram import Update
 from telegram.ext import ContextTypes, CallbackQueryHandler
 from pathlib import Path
+import asyncio
 import time
 import os
 import init
@@ -10,6 +11,26 @@ from app.utils.message_queue import add_task_to_queue
 from telegram.helpers import escape_markdown
 
 aria2_download_check_executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="Aria2_Download")
+
+def _do_aria2_push(save_path, download_path_base, device_name, chat_id):
+    """在工作线程中执行 Aria2 推送（同步阻塞操作）"""
+    download_urls = init.openapi_115.get_file_download_url(save_path)
+    init.logger.info(f"[{save_path}]目录发现{len(download_urls)}个文件需要下载")
+
+    path = Path(save_path)
+    last_part = path.parts[-1] if path.parts[-1] else path.parts[-2]
+    download_dir = os.path.join(download_path_base, last_part)
+    init.logger.info(f"推送到Aria2，下载目录: {download_dir}")
+    all_pushed = True
+    for download_url in download_urls:
+        download = download_by_url(download_url, download_dir)
+        if not download:
+            all_pushed = False
+            init.logger.error(f"推送到Aria2失败，下载链接: {download_url}")
+        else:
+            aria2_download_check_executor.submit(check_download_complete, download_url, chat_id, device_name)
+        time.sleep(1)
+    return all_pushed, last_part
 
 async def push2aria2(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -36,26 +57,12 @@ async def push2aria2(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 init.logger.warn("❌ 无效的文件路径，无法推送到Aria2。")
                 await query.answer("❌ 无效的文件路径，无法推送到Aria2。", show_alert=True)
                 return
-            download_urls = init.openapi_115.get_file_download_url(save_path)
-            init.logger.info(f"[{save_path}]目录发现{len(download_urls)}个文件需要下载")
-            
-            # 获取文件夹名作为下载目录
-            path = Path(save_path)
-            last_part = path.parts[-1] if path.parts[-1] else path.parts[-2]
-            download_dir = os.path.join(init.bot_config.get("aria2", {}).get("download_path", ""), last_part)
-            init.logger.info(f"推送到Aria2，下载目录: {download_dir}")
-            all_pushed = True
-            # 获取设备名称
             device_name = init.bot_config.get('aria2', {}).get('device_name', 'Aria2') or 'Aria2'
-            for download_url in download_urls:
-                download = download_by_url(download_url, download_dir)
-                if not download:
-                    all_pushed = False
-                    init.logger.error(f"推送到Aria2失败，下载链接: {download_url}")
-                else:
-                    # 添加到检查队列
-                    aria2_download_check_executor.submit(check_download_complete, download_url, update.effective_chat.id, device_name)
-                time.sleep(1)  # 避免短时间内添加过多任务
+            download_path_base = init.bot_config.get("aria2", {}).get("download_path", "")
+            # 移至线程池避免阻塞主事件循环
+            all_pushed, last_part = await asyncio.to_thread(
+                _do_aria2_push, save_path, download_path_base, device_name, update.effective_chat.id
+            )
             
             
             try:

@@ -28,8 +28,8 @@ async def rss_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ 对不起，您无权使用115机器人！")
         return ConversationHandler.END
     
-    # 深度检查RSS配置
-    error_message = check_rss_config()
+    # 深度检查RSS配置（包含HTTP验证，移至线程池）
+    error_message = await asyncio.to_thread(check_rss_config)
     if error_message:
         await update.message.reply_text(error_message)
         return ConversationHandler.END

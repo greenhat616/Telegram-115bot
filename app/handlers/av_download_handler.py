@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import asyncio
 import requests
 from bs4 import BeautifulSoup
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -132,14 +133,14 @@ async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYP
                 av_number = context.user_data["av_number"]
                 context.user_data["selected_path"] = last_path
                 
-                # 抓取磁力
+                # 抓取磁力（移至线程池避免阻塞主事件循环）
                 await query.edit_message_text(f"🔍 正在搜索 [{av_number}] 的磁力链接...")
-                av_result = get_av_result(av_number)
-                
+                av_result = await asyncio.to_thread(get_av_result, av_number)
+
                 if not av_result:
                     await query.edit_message_text(f"😵‍💫很遗憾，没有找到{av_number.upper()}的对应磁力~")
                     return ConversationHandler.END
-                
+
                 # 立即反馈用户
                 await query.edit_message_text(f"✅ [{av_number}] 已为您添加到下载队列！\n保存路径: {last_path}\n请稍后...")
                 
@@ -192,10 +193,10 @@ async def select_sub_category(update: Update, context: ContextTypes.DEFAULT_TYPE
         return ConversationHandler.END
     else:
         av_number = context.user_data["av_number"]
-        # 抓取磁力
+        # 抓取磁力（移至线程池避免阻塞主事件循环）
         await query.edit_message_text(f"🔍 正在搜索 [{av_number}] 的磁力链接...")
-        av_result = get_av_result(av_number)
-        
+        av_result = await asyncio.to_thread(get_av_result, av_number)
+
         if not av_result:
             await query.edit_message_text(f"😵‍💫很遗憾，没有找到{[av_number.upper()]}的对应磁力~")
             return ConversationHandler.END
