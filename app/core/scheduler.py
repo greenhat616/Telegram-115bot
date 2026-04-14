@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import init
 import threading
@@ -12,7 +12,7 @@ from app.handlers.offline_task_handler import try_to_offline2115_again
 from app.core.sehua_spider import sehua_spider_start
 from app.core.offline_task_retry import offline_task_retry
 
-scheduler = BlockingScheduler()
+scheduler = BackgroundScheduler()
 
 def get_sync_time(category):
     sync_time = {'hour': 3, 'minute': 0}  # 默认时间03:00
@@ -72,7 +72,7 @@ def init_tasks():
 def subscribe_scheduler():
     # 初始化任务列表，确保配置已加载
     init_tasks()
-    
+
     for task in tasks:
         if not scheduler.get_job(task["id"]):
             if task['task_type'] == 'interval':
@@ -80,12 +80,18 @@ def subscribe_scheduler():
                     task["func"],
                     IntervalTrigger(seconds=task["interval"]),
                     id=task["id"],
+                    max_instances=1,
+                    coalesce=True,
+                    misfire_grace_time=300,
                 )
             if task['task_type'] == 'time':
                 scheduler.add_job(
                     task["func"],
                     CronTrigger(hour=task["hour"], minute=task["minute"]),
                     id=task["id"],
+                    max_instances=1,
+                    coalesce=True,
+                    misfire_grace_time=300,
                 )
     # 确保调度器是启动状态
     if not scheduler.running:
@@ -105,7 +111,6 @@ def stop_all_subscriptions():
 
 
 def start_scheduler_in_thread():
-    thread = threading.Thread(target=subscribe_scheduler)
-    thread.daemon = True  # 设置为守护线程，主线程退出时自动结束
-    thread.start()
+    """启动后台调度器（BackgroundScheduler 自带线程池，无需额外的守护线程）"""
+    subscribe_scheduler()
 
