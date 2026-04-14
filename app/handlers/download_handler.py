@@ -18,6 +18,7 @@ from warnings import filterwarnings
 from telegram.warnings import PTBUserWarning
 from app.utils.sqlitelib import SqlLiteLib
 from app.models.enums import DownloadUrlType
+from app.models.dto import PendingTask, PendingPushTask
 from concurrent.futures import ThreadPoolExecutor
 
 filterwarnings(action="ignore", message=r".*CallbackQueryHandler", category=PTBUserWarning)
@@ -49,7 +50,7 @@ async def start_d_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         init.bot_config.category_folder
     ]
     # 只在有最后保存路径时才显示该选项
-    if hasattr(init, 'bot_session') and "movie_last_save" in init.bot_session:
+    if "movie_last_save" in init.bot_session:
         last_save_path = init.bot_session['movie_last_save']
         keyboard.append([InlineKeyboardButton(f"📁 上次保存: {last_save_path}", callback_data="last_save_path")])
     keyboard.append([InlineKeyboardButton("取消", callback_data="cancel")])
@@ -67,7 +68,7 @@ async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYP
     if query_data == "cancel":
         return await quit_conversation(update, context)
     elif query_data == "last_save_path":
-        if hasattr(init, 'bot_session') and "movie_last_save" in init.bot_session:
+        if "movie_last_save" in init.bot_session:
             last_save_path = init.bot_session["movie_last_save"]
             link = context.user_data["link"]
             user_id = update.effective_user.id
@@ -105,8 +106,6 @@ async def select_sub_category(update: Update, context: ContextTypes.DEFAULT_TYPE
     # 获取用户选择的路径
     selected_path = query.data
     # 保存最后一次选择路径
-    if not hasattr(init, 'bot_session'):
-        init.bot_session = {}
     init.bot_session['movie_last_save'] = selected_path
     
     if selected_path == "cancel":
@@ -132,18 +131,18 @@ async def handle_retry_callback(update: Update, context: ContextTypes.DEFAULT_TY
         task_id = query.data.replace("retry_", "")
         
         # 从全局存储中获取任务数据
-        if hasattr(init, 'pending_tasks') and task_id in init.pending_tasks:
+        if task_id in init.pending_tasks:
             task_data = init.pending_tasks[task_id]
-            
+
             # 添加到重试列表
             save_failed_download_to_db(
-                task_data["resource_name"], 
-                task_data["link"], 
-                task_data["selected_path"]
+                task_data.resource_name,
+                task_data.link,
+                task_data.selected_path,
             )
-            
+
             await query.edit_message_text("✅ 已将失败任务添加到重试列表，系统将自动重试！")
-            
+
             # 清理已使用的任务数据
             del init.pending_tasks[task_id]
         else:
@@ -329,19 +328,15 @@ def download_task(link, selected_path, user_id):
             # 为避免callback_data长度限制，使用时间戳作为唯一标识符
             task_id = str(int(time.time() * 1000))  # 毫秒时间戳作为唯一ID
             
-            # 将任务数据存储到全局字典中（临时存储）
-            if not hasattr(init, 'pending_tasks'):
-                init.pending_tasks = {}
-            
-            init.pending_tasks[task_id] = {
-                "user_id": user_id,
-                "action": "manual_rename", 
-                "final_path": final_path,
-                "resource_name": resource_name,
-                "selected_path": selected_path,
-                "link": link,
-                "add2retry": False
-            }
+            init.pending_tasks[task_id] = PendingTask(
+                user_id=user_id,
+                action="manual_rename",
+                final_path=final_path,
+                resource_name=resource_name,
+                selected_path=selected_path,
+                link=link,
+                add2retry=False,
+            )
             
             # 发送下载成功通知，包含选择按钮
             keyboard = [
@@ -365,18 +360,14 @@ def download_task(link, selected_path, user_id):
             # 为失败重试也使用时间戳ID
             retry_task_id = str(int(time.time() * 1000))
             
-            # 将重试任务数据存储到全局字典中
-            if not hasattr(init, 'pending_tasks'):
-                init.pending_tasks = {}
-                
-            init.pending_tasks[retry_task_id] = {
-                "user_id": user_id,
-                "action": "retry_download",
-                "selected_path": selected_path,
-                "resource_name": resource_name,
-                "link": link,
-                "add2retry": True
-            }
+            init.pending_tasks[retry_task_id] = PendingTask(
+                user_id=user_id,
+                action="retry_download",
+                selected_path=selected_path,
+                resource_name=resource_name,
+                link=link,
+                add2retry=True,
+            )
             
             # 提供重试选项
             keyboard = [
@@ -407,13 +398,13 @@ async def handle_manual_rename_callback(update: Update, context: ContextTypes.DE
         task_id = query.data.replace("rename_", "")
         
         # 从全局存储中获取任务数据
-        if hasattr(init, 'pending_tasks') and task_id in init.pending_tasks:
+        if task_id in init.pending_tasks:
             task_data = init.pending_tasks[task_id]
-            
+
             # 将数据保存到用户上下文中（用于后续的重命名操作）
             context.user_data["rename_data"] = task_data
 
-            await query.edit_message_text(f"`{task_data['resource_name']}`\n\n📝 请直接回复TMDB标准名称进行重命名：\n\\(点击资源名称自动复制\\)", parse_mode='MarkdownV2')
+            await query.edit_message_text(f"`{task_data.resource_name}`\n\n📝 请直接回复TMDB标准名称进行重命名：\n\\(点击资源名称自动复制\\)", parse_mode='MarkdownV2')
 
             # 清理已使用的任务数据
             del init.pending_tasks[task_id]
@@ -435,9 +426,9 @@ async def handle_cancel_callback(update: Update, context: ContextTypes.DEFAULT_T
         task_id = query.data.replace("cancel_", "")
         
         # 从全局存储中清理任务数据
-        if hasattr(init, 'pending_tasks') and task_id in init.pending_tasks:
+        if task_id in init.pending_tasks:
             task_data = init.pending_tasks[task_id]
-            resource_name = task_data.get('resource_name', '未知资源')
+            resource_name = task_data.resource_name or '未知资源'
             
             # 清理任务数据
             del init.pending_tasks[task_id]
@@ -458,9 +449,9 @@ async def handle_cancel_callback(update: Update, context: ContextTypes.DEFAULT_T
 
 def _sync_rename_and_process(new_resource_name, rename_data):
     """在工作线程中执行重命名及后续处理（同步阻塞操作）"""
-    final_path = rename_data["final_path"]
-    selected_path = rename_data["selected_path"]
-    download_url = rename_data["link"]
+    final_path = rename_data.final_path
+    selected_path = rename_data.selected_path
+    download_url = rename_data.link
 
     # 执行重命名
     init.openapi_115.rename(final_path, new_resource_name)
@@ -497,10 +488,10 @@ async def handle_manual_rename(update: Update, context: ContextTypes.DEFAULT_TYP
         new_resource_name = update.message.text.strip()
 
         # 获取重命名所需的数据
-        old_resource_name = rename_data["resource_name"]
-        selected_path = rename_data["selected_path"]
-        download_url = rename_data["link"]
-        add2retry = rename_data["add2retry"]
+        old_resource_name = rename_data.resource_name
+        selected_path = rename_data.selected_path
+        download_url = rename_data.link
+        add2retry = rename_data.add2retry
 
         # 添加到重试列表
         if add2retry:
@@ -579,13 +570,7 @@ def push2aria2(new_final_path, cover_url, message, user_id):
     push_task_id = str(uuid.uuid4())[:8]
     
     # 初始化pending_push_tasks（如果不存在）
-    if not hasattr(init, 'pending_push_tasks'):
-        init.pending_push_tasks = {}
-    
-    # 存储推送任务数据
-    init.pending_push_tasks[push_task_id] = {
-        'path': new_final_path
-    }
+    init.pending_push_tasks[push_task_id] = PendingPushTask(path=new_final_path)
     
     device_name = init.bot_config.aria2.device_name or 'Aria2'
     

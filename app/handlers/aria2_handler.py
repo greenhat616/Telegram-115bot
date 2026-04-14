@@ -41,10 +41,10 @@ async def push2aria2(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 检查是否是新的ID格式
         task_id = data[len("push2aria2_"):]
         save_path = ""
-        if hasattr(init, 'pending_push_tasks') and task_id in init.pending_push_tasks:
-            # 新格式：从全局存储中获取数据
+        if task_id in init.pending_push_tasks:
+            # 从全局存储中获取数据
             task_data = init.pending_push_tasks[task_id]
-            save_path = task_data["path"]
+            save_path = task_data.path
             init.logger.info(f"推送任务ID: {task_id}, 文件路径: {save_path}")
             # 清理已使用的任务数据
             del init.pending_push_tasks[task_id]

@@ -198,7 +198,7 @@ def _batch_insert_sync(items):
     # 实际的 SQL 插入逻辑，根据你的表结构调整
     # 这里使用上下文管理器，确保连接正确关闭
     insert_count = 0
-    with init.SqlLiteLib() as sqlite:
+    with SqlLiteLib() as sqlite:
         for data in items:
             # 判断数据有效性 (只检查核心字段，防止因非关键字段缺失导致丢弃)
             if  not data.get("magnet") or \

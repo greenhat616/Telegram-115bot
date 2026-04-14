@@ -2,7 +2,7 @@
 
 import sqlite3
 from app import init
-from typing import Optional, TypeVar
+from typing import TypeVar
 
 from pydantic import BaseModel
 
@@ -11,8 +11,8 @@ T = TypeVar("T", bound=BaseModel)
 
 class SqlLiteLib:
     def __init__(self):
-        self.conn: Optional[sqlite3.Connection] = None
-        self.cursor: Optional[sqlite3.Cursor] = None
+        self.conn: sqlite3.Connection | None = None
+        self.cursor: sqlite3.Cursor | None = None
         self.logger = init.logger
 
     def __enter__(self):

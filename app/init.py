@@ -4,10 +4,11 @@ import os
 import yaml
 import shutil
 import subprocess
-from typing import Any
+import aria2p
 from telethon import TelegramClient
 from app.core.open_115 import OpenAPI_115
 from app.models.config import BotConfig
+from app.models.dto import PendingTask, PendingPushTask
 
 
 from app.utils.logger import Logger
@@ -29,7 +30,7 @@ openapi_115: OpenAPI_115 | None = None
 tg_user_client: TelegramClient | None = None
 
 # aria2 客户端
-aria2_client: Any = None
+aria2_client: aria2p.API | None = None
 
 # 爬取状态
 CRAWL_SEHUA_STATUS: int = 0
@@ -38,9 +39,9 @@ CRAWL_JAV_STATUS: int = 0
 # 会话状态
 bot_session: dict[str, str] = {}
 # 待处理任务
-pending_tasks: dict[str, dict] = {}
+pending_tasks: dict[str, PendingTask] = {}
 # 待推送任务
-pending_push_tasks: dict[str, dict] = {}
+pending_push_tasks: dict[str, PendingPushTask] = {}
 
 
 # yaml配置文件
@@ -106,9 +107,8 @@ def create_logger():
     """
     global logger
     import logging
-    from typing import Dict
     # 日志级别映射字典
-    LOG_LEVEL_MAP: Dict[str, int] = {
+    LOG_LEVEL_MAP: dict[str, int] = {
         'debug': logging.DEBUG,
         'info': logging.INFO,
         'warning': logging.WARNING,

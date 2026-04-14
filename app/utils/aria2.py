@@ -9,7 +9,7 @@ sys.path.append(current_dir)
 from app import init
 
 
-aria2 = None
+aria2: aria2p.API | None = None
 
 def create_aria2_client(host, port, secret):
     global aria2

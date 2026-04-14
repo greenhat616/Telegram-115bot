@@ -10,6 +10,7 @@ from app.utils.sqlitelib import SqlLiteLib
 from app.utils.message_queue import add_task_to_queue
 from telegram.helpers import escape_markdown
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from app.models.dto import PendingPushTask
 
 
 def wait_for_message_queue_completion(task_name="任务", timeout=0):
@@ -481,14 +482,7 @@ def push2aria2(save_path, user_id, cover_image, message):
     import uuid
     push_task_id = str(uuid.uuid4())[:8]
     
-    # 初始化pending_push_tasks（如果不存在）
-    if not hasattr(init, 'pending_push_tasks'):
-        init.pending_push_tasks = {}
-    
-    # 存储推送任务数据
-    init.pending_push_tasks[push_task_id] = {
-        'path': save_path
-    }
+    init.pending_push_tasks[push_task_id] = PendingPushTask(path=save_path)
     
     device_name = init.bot_config.aria2.device_name or 'Aria2'
     

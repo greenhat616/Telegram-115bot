@@ -12,6 +12,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from app.utils.cover_capture import get_av_cover
 from telegram.helpers import escape_markdown
+from app.models.dto import PendingPushTask
 
 # 全局线程池，用于处理下载任务
 download_executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="AV_Download")
@@ -38,7 +39,7 @@ async def start_av_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         init.bot_config.category_folder
     ]
     # 只在有最后保存路径时才显示该选项
-    if hasattr(init, 'bot_session') and "av_last_save" in init.bot_session:
+    if "av_last_save" in init.bot_session:
         last_save_path = init.bot_session['av_last_save']
         keyboard.append([InlineKeyboardButton(f"📁 上次保存: {last_save_path}", callback_data="last_save_path")])
     keyboard.append([InlineKeyboardButton("取消", callback_data="cancel")])
@@ -65,7 +66,7 @@ async def start_batch_download_command(update: Update, context: ContextTypes.DEF
         init.bot_config.category_folder
     ]
     # 只在有最后保存路径时才显示该选项
-    if hasattr(init, 'bot_session') and "av_last_save" in init.bot_session:
+    if "av_last_save" in init.bot_session:
         last_save_path = init.bot_session['av_last_save']
         keyboard.append([InlineKeyboardButton(f"📁 上次保存: {last_save_path}", callback_data="last_save_path")])
     keyboard.append([InlineKeyboardButton("取消", callback_data="cancel")])
@@ -101,7 +102,7 @@ async def download_from_file(update: Update, context: ContextTypes.DEFAULT_TYPE)
         init.bot_config.category_folder
     ]
     # 只在有最后保存路径时才显示该选项
-    if hasattr(init, 'bot_session') and "av_last_save" in init.bot_session:
+    if "av_last_save" in init.bot_session:
         last_save_path = init.bot_session['av_last_save']
         keyboard.append([InlineKeyboardButton(f"📁 上次保存: {last_save_path}", callback_data="last_save_path")])
     keyboard.append([InlineKeyboardButton("取消", callback_data="cancel")])
@@ -120,7 +121,7 @@ async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYP
         return await quit_conversation(update, context)
     elif selected_main_category == "last_save_path":
         # 直接使用最后一次保存的路径
-        if hasattr(init, 'bot_session') and "av_last_save" in init.bot_session:
+        if "av_last_save" in init.bot_session:
             user_id = update.effective_user.id
             last_path = init.bot_session['av_last_save']
             # 批量磁力下载
@@ -182,8 +183,6 @@ async def select_sub_category(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = update.effective_user.id
     
     # 保存最后一次使用的路径
-    if not hasattr(init, 'bot_session'):
-        init.bot_session = {}
     init.bot_session['av_last_save'] = selected_path
     
     if "dl_links" in context.user_data:
@@ -308,14 +307,7 @@ def push2aria2(save_path, user_id, cover_image, message):
     import uuid
     push_task_id = str(uuid.uuid4())[:8]
     
-    # 初始化pending_push_tasks（如果不存在）
-    if not hasattr(init, 'pending_push_tasks'):
-        init.pending_push_tasks = {}
-    
-    # 存储推送任务数据
-    init.pending_push_tasks[push_task_id] = {
-        'path': save_path
-    }
+    init.pending_push_tasks[push_task_id] = PendingPushTask(path=save_path)
     
     device_name = init.bot_config.aria2.device_name or 'Aria2'
     

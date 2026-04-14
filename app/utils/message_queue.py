@@ -8,7 +8,7 @@ from telegram.helpers import escape_markdown
 # 全局消息队列
 message_queue = asyncio.Queue()
 # 全局变量，用于存储事件循环
-global_loop = None
+global_loop: asyncio.AbstractEventLoop | None = None
 
 
 def add_task_to_queue(sub_user, post_url, message, keyboard=None, retry_count=0):

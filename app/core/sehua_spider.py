@@ -25,7 +25,7 @@ import asyncio
 from app.utils.http_client import http_request
 
 # 全局browser
-browser = None
+browser: SeleniumBrowser | None = None
 
 def _build_full_url(path: str):
     """根据 browser.base_url 构造完整 URL，避免重复添加协议头"""
