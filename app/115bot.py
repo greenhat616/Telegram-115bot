@@ -165,6 +165,21 @@ async def set_bot_menu(application):
     except Exception as e:
         init.logger.error(f"设置Bot菜单失败: {e}")
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    """全局异常处理器，防止未捕获异常导致 polling 静默停止"""
+    import traceback
+    error_details = traceback.format_exc()
+    init.logger.error(f"Unhandled exception in handler: {context.error}\n{error_details}")
+    # 尝试通知用户
+    try:
+        if update and hasattr(update, 'effective_chat') and update.effective_chat:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=f"⚠️ 处理请求时发生内部错误，请稍后重试。"
+            )
+    except Exception:
+        pass
+
 async def post_init(application):
     """应用初始化后的回调"""
     await set_bot_menu(application)
@@ -193,7 +208,9 @@ if __name__ == '__main__':
     # 调整telegram日志级别
     update_logger_level()
     token = init.bot_config['bot_token']
-    application = Application.builder().token(token).post_init(post_init).build()    
+    application = Application.builder().token(token).post_init(post_init).build()
+    # 注册全局异常处理器
+    application.add_error_handler(error_handler)
 
     # 启动帮助
     start_handler = CommandHandler('start', start)
