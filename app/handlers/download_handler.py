@@ -13,7 +13,7 @@ from pathlib import Path
 from app.utils.cover_capture import get_movie_cover
 from app.utils.message_queue import add_task_to_queue
 from app.utils.ai import get_movie_tmdb_name_with_ai
-import requests
+from app.utils.http_client import http_request_fast
 from enum import Enum
 from warnings import filterwarnings
 from telegram.warnings import PTBUserWarning
@@ -280,7 +280,7 @@ def notice_emby_scan_library(path):
             }
         ]
     }
-    emby_response = requests.post(url, headers=headers, json=data, timeout=(5, 15))
+    emby_response = http_request_fast("POST", url, headers=headers, json=data, timeout=(5, 15))
     if emby_response.text == "":
         init.logger.info("通知Emby扫库成功！")
         return True

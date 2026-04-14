@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import requests
 import sys
 import os
 import json
@@ -7,6 +6,7 @@ current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 sys.path.append(current_dir)
+from app.utils.http_client import http_request_long
 import init
 
 def check_ai_api_available():
@@ -46,7 +46,7 @@ def chat_completion(tip_words, max_tokens=8192):
     }
 
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=(10, 60))
+        response = http_request_long("POST", url, json=payload, headers=headers, timeout=(10, 60))
         if response.status_code != 200:
             init.logger.warn(f"AI API请求失败: {response.text}")
             return None

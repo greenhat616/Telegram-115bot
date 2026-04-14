@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-import requests
 import init
 from bs4 import BeautifulSoup
 import time
+from app.utils.http_client import http_request
 from pathlib import Path
 from app.utils.sqlitelib import *
 from app.handlers.download_handler import create_strm_file, notice_emby_scan_library
@@ -27,7 +27,7 @@ def get_tmdb_id(movie_name, page=1):
     init.logger.info(f"正在从TMDB[第{page}]页搜索电影: {movie_name}")
     tmdb_id = 0
     try:
-        response = requests.get(url=search_url, headers=headers, timeout=30)
+        response = http_request("GET", search_url, headers=headers, timeout=30)
         soup = BeautifulSoup(response.text, features="html.parser")
         tags_p = soup.find_all('p')
         for tag in tags_p:
@@ -188,7 +188,7 @@ def get_response_from_api(url):
         "X-APP-ID": init.bot_config['x_app_id'],
         "X-API-KEY": init.bot_config['x_api_key']
     }
-    response = requests.get(url, headers=headers, timeout=(5, 30))
+    response = http_request("GET", url, headers=headers, timeout=(5, 30))
     return response.json()
 
 

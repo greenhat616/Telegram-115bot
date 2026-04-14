@@ -4,13 +4,14 @@ current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 sys.path.append(current_dir)
-import requests
+import httpx
 from bs4 import BeautifulSoup
 from telegram.helpers import escape_markdown
 import init
 import asyncio
 import json
 import re
+from app.utils.http_client import http_request
 from app.core.offline_task_retry import javbus_offline
 from app.utils.sqlitelib import *
 from concurrent.futures import ThreadPoolExecutor
@@ -102,11 +103,11 @@ async def get_content_from_rssurl(rss_url):
         # 使用 run_in_executor 将同步的 requests 调用转换为异步
         response = await loop.run_in_executor(
             executor, 
-            lambda: requests.get(rss_url, timeout=init.bot_config.get("rsshub", {}).get("timeout", 60))
+            lambda: http_request("GET", rss_url, timeout=init.bot_config.get("rsshub", {}).get("timeout", 60))
         )
         response.raise_for_status()
         return response.text
-    except requests.RequestException as e:
+    except httpx.HTTPError as e:
         init.logger.error(f"获取RSS内容失败: {e}, RSS链接: {rss_url}")
         return None
     except Exception as e:
@@ -139,7 +140,7 @@ async def download_image(url, referer=None, save_dir="/tmp/javbus"):
         loop = asyncio.get_running_loop()
         response = await loop.run_in_executor(
             executor, 
-            lambda: requests.get(url, headers=headers, timeout=30)
+            lambda: http_request("GET", url, headers=headers, timeout=30)
         )
         
         if response.status_code == 200:

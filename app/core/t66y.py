@@ -14,7 +14,7 @@ import yaml
 import os
 import re
 import json
-import requests
+from app.utils.http_client import http_request
 from pathlib import Path
 from app.core.offline_task_retry import t66y_offline
 from app.core.selenium_browser import SeleniumBrowser
@@ -253,7 +253,7 @@ async def start_t66y_rss_async(section_name):
                 init.logger.warning(f"未知的t66y版块名称: {section.get('name', '')}，跳过该版块的RSS订阅")
                 continue
             rss_url = f"{rss_host.rstrip('/')}/t66y/{section_id}/today?format=json"
-            response = requests.get(rss_url, timeout=init.bot_config.get("rsshub", {}).get("t66y", {}).get("timeout", 60))
+            response = http_request("GET", rss_url, timeout=init.bot_config.get("rsshub", {}).get("t66y", {}).get("timeout", 60))
             if response.status_code != 200:
                 init.logger.error(f"无法获取t66y RSS订阅，HTTP状态码: {response.status_code}")
                 continue

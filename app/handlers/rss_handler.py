@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-import requests
+import httpx
+from app.utils.http_client import http_request_fast
 from bs4 import BeautifulSoup
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, ConversationHandler, CallbackQueryHandler, MessageHandler, filters
@@ -177,10 +178,10 @@ def check_rss_config(main_category=None):
     else:
         # 简单验证RSSHub地址是否可用
         try:
-            response = requests.get(rss_host, timeout=5)
+            response = http_request_fast("GET", rss_host, timeout=5)
             if response.status_code != 200:
                 return error_message
-        except requests.RequestException:
+        except httpx.HTTPError:
             error_message = "❌ RSSHub地址不可用，请检查配置！"
             init.logger.warn(error_message)
             return error_message

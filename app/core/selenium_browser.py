@@ -3,11 +3,11 @@ import asyncio
 import re
 import time
 import os
-import requests
 import json
 from concurrent.futures import ThreadPoolExecutor
 from selenium.webdriver.common.by import By
 from selenium import webdriver
+from app.utils.http_client import http_request_long
 import init
 from seleniumbase import SB
 import subprocess
@@ -266,7 +266,7 @@ class SeleniumBrowser:
             headers = {"Content-Type": "application/json"}
             
             init.logger.info(f"请求 Flaresolverr: {FLARESOLVERR_URL}")
-            response = requests.post(FLARESOLVERR_URL, json=payload, headers=headers, timeout=125)
+            response = http_request_long("POST", FLARESOLVERR_URL, json=payload, headers=headers, timeout=125)
             resp_data = response.json()
             
             if resp_data.get("status") == "ok":

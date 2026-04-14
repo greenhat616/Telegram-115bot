@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import asyncio
-import requests
+from app.utils.http_client import http_request
 from bs4 import BeautifulSoup
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, ConversationHandler, CallbackQueryHandler, MessageHandler, filters
@@ -222,7 +222,7 @@ async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def get_av_result(av_number):
     result = []
     url = f"https://sukebei.nyaa.si/?q={av_number}&f=0&c=0_0"
-    response = requests.get(url, timeout=(10, 30))
+    response = http_request("GET", url, timeout=(10, 30))
     if response.status_code != 200:
         return result
     soup = BeautifulSoup(response.text, 'html.parser')

@@ -22,7 +22,7 @@ from app.core.selenium_browser import SeleniumBrowser
 from app.utils.utils import get_magnet_hash, read_yaml_file, check_magnet
 from app.utils.message_queue import add_task_to_queue
 import asyncio
-import requests
+from app.utils.http_client import http_request
 
 # 全局browser
 browser = None
@@ -70,22 +70,20 @@ async def download_image(image_url, save_path):
         
         init.logger.debug(f"开始下载外链图片: {image_url}")
         
-        # 使用 requests 配合 selenium cookies 下载
+        # 使用 httpx 配合 selenium cookies 下载
         try:
             init.logger.debug("尝试直接访问图片URL...")
-            
+
             cookies = await browser.get_cookies()
-            session = requests.Session()
-            for cookie in cookies:
-                session.cookies.set(cookie['name'], cookie['value'])
-            
+            cookie_jar = {cookie['name']: cookie['value'] for cookie in cookies}
+
             headers = {
                 "User-Agent": init.USER_AGENT,
                 "Referer": f"https://{get_base_url()}/"
             }
-            
+
             def _download():
-                return session.get(image_url, headers=headers, timeout=60)
+                return http_request("GET", image_url, headers=headers, cookies=cookie_jar, timeout=60)
             
             response = await asyncio.to_thread(_download)
             

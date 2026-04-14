@@ -5,10 +5,10 @@ current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 sys.path.append(current_dir)
-import requests
 from bs4 import BeautifulSoup
 import init
 import asyncio
+from app.utils.http_client import http_request
 import time
 from app.core.selenium_browser import SeleniumBrowser
 
@@ -25,7 +25,7 @@ def get_movie_cover(query, page=1):
         "user-agent": init.USER_AGENT,
         "accept-language": "zh-CN"
     }
-    response = requests.get(headers=headers, url=url, timeout=(5, 30))
+    response = http_request("GET", url, headers=headers, timeout=(5, 30))
     if response.status_code != 200:
         return ""
     soup = BeautifulSoup(response.text, features="html.parser")
@@ -47,7 +47,7 @@ def get_movie_cover(query, page=1):
         return ""
     main_page = tag_parent['href']
     url = base_url + main_page
-    response = requests.get(headers=headers, url=url, timeout=(5, 30))
+    response = http_request("GET", url, headers=headers, timeout=(5, 30))
     if response.status_code != 200:
         return ""
     soup = BeautifulSoup(response.text, features="html.parser")

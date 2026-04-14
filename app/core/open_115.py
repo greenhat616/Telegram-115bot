@@ -1,4 +1,4 @@
-import requests
+import httpx
 import os
 import base64
 import hashlib
@@ -20,58 +20,62 @@ from functools import wraps
 from app.utils.message_queue import add_task_to_queue
 from app.utils.alioss import upload_file_to_oss
 from telegram.helpers import escape_markdown
+from tenacity import (
+    retry,
+    retry_if_exception,
+    retry_if_result,
+    stop_after_attempt,
+    wait_exponential,
+    wait_random,
+)
 
 RISK_THRESHOLD = 0.95
 
+
+def _retryable_httpx_exception(exc):
+    return isinstance(exc, (
+        httpx.ConnectError,
+        httpx.TimeoutException,
+        httpx.RemoteProtocolError,
+        httpx.PoolTimeout,
+    ))
+
+
+def _retryable_5xx_result(result):
+    """仅匹配 HTTP 5xx 状态码，不匹配 115 业务错误码（如 40140125）"""
+    return isinstance(result, dict) and result.get("_http_status", 0) in (500, 502, 503, 504)
+
+
+def _return_last_outcome(retry_state):
+    """重试耗尽后返回最后结果而非 RetryError"""
+    if retry_state.outcome.failed:
+        raise retry_state.outcome.exception()
+    return retry_state.outcome.result()
+
 def handle_token_expiry(func):
-    """装饰器：统一处理API调用中的token过期情况"""
+    """装饰器：仅处理 token 过期（40140125），网络异常由 _make_api_request 的 tenacity 处理"""
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        max_retries = 2  # 最大重试次数
-        for attempt in range(max_retries):
-            try:
-                # 调用原始函数，获取HTTP响应
-                response = func(self, *args, **kwargs)
-                
-                # 检查响应是否是字典且包含错误码
-                if isinstance(response, dict) and 'code' in response:
-                    if response['code'] == 40140125:
-                        # token需要刷新
-                        if attempt < max_retries - 1:  # 还有重试机会
-                            init.logger.info("Token需要刷新，正在重试...")
-                            self.refresh_access_token()
-                            continue
-                        else:
-                            init.logger.warn("Token刷新后仍然失败")
-                            return response
-                    elif response['code'] in [40140116, 40140119]:
-                        # token已过期，需要重新授权
-                        init.logger.warn("Access token 已过期，请重新授权！")
-                        return response
-                    elif response['code'] == 40140118:
-                        init.logger.warn("开发者认证已过期，请到115开放平台重新授权！")
-                        return response
-                    elif response['code'] == 40140110:
-                        init.logger.warn("应用已过期，请到115开放平台重新授权！")
-                        return response
-                    elif response['code'] == 40140109:
-                        init.logger.warn("应用被停用，请到115开放平台查询详细信息！")
-                        return response
-                    elif response['code'] == 40140108:
-                        init.logger.warn("应用审核未通过，请稍后再试！")
-                        return response
-                
-                # 成功或其他情况，直接返回
-                return response
-                
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    init.logger.warn(f"API调用失败，正在重试: {e}")
-                    continue
-                else:
-                    init.logger.warn(f"API调用最终失败: {e}")
-                    raise
-        
+        response = func(self, *args, **kwargs)
+        if isinstance(response, dict) and response.get('code') == 40140125:
+            init.logger.info("Token需要刷新，正在刷新后重试...")
+            self.refresh_access_token()
+            time.sleep(0.5)
+            response = func(self, *args, **kwargs)
+            if isinstance(response, dict) and response.get('code') == 40140125:
+                init.logger.warn("Token刷新后仍然失败")
+        if isinstance(response, dict) and 'code' in response:
+            code = response['code']
+            if code in (40140116, 40140119):
+                init.logger.warn("Access token 已过期，请重新授权！")
+            elif code == 40140118:
+                init.logger.warn("开发者认证已过期，请到115开放平台重新授权！")
+            elif code == 40140110:
+                init.logger.warn("应用已过期，请到115开放平台重新授权！")
+            elif code == 40140109:
+                init.logger.warn("应用被停用，请到115开放平台查询详细信息！")
+            elif code == 40140108:
+                init.logger.warn("应用审核未通过，请稍后再试！")
         return response
     return wrapper
 
@@ -124,7 +128,7 @@ class OpenAPI_115:
             "code_challenge": challenge,
             "code_challenge_method": "sha256"
         }
-        response = requests.post(f"https://passportapi.115.com/open/authDeviceCode", headers=header, data=data, timeout=(5, 30))
+        response = httpx.post("https://passportapi.115.com/open/authDeviceCode", headers=header, data=data, timeout=httpx.Timeout(30.0, connect=5.0))
         res = response.json()
         if response.status_code == 200:
             uid = res['data']['uid']
@@ -161,7 +165,7 @@ class OpenAPI_115:
             "sign": sign
         }
         while True:
-            response = requests.get(f"https://qrcodeapi.115.com/get/status/", params=params, timeout=(5, 15))
+            response = httpx.get("https://qrcodeapi.115.com/get/status/", params=params, timeout=httpx.Timeout(15.0, connect=5.0))
             if response.status_code == 200:
                 res = response.json()
                 if res['state'] == 0:
@@ -180,10 +184,10 @@ class OpenAPI_115:
                         # 2.扫码成功，获取access_token
                         init.logger.info("二维码扫码成功，正在获取access_token...")
                         time.sleep(1)
-                        response = requests.post("https://passportapi.115.com/open/deviceCodeToToken", headers=header, data={
+                        response = httpx.post("https://passportapi.115.com/open/deviceCodeToToken", headers=header, data={
                             "uid": uid,
                             "code_verifier": verifier
-                        }, timeout=(5, 30))
+                        }, timeout=httpx.Timeout(30.0, connect=5.0))
                         res = response.json()
                         if response.status_code == 200 and 'data' in res:
                             self.access_token = res['data']['access_token']
@@ -203,6 +207,18 @@ class OpenAPI_115:
             except Exception as e:
                 init.logger.warn(f"读取Token文件失败: {e}")
         return "", ""
+
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=0.5, min=0.5, max=5) + wait_random(0, 0.5),
+        retry=retry_if_exception(_retryable_httpx_exception),
+        reraise=True,
+    )
+    def _refresh_token_request(self, url, headers, data):
+        response = httpx.post(url, headers=headers, data=data, timeout=httpx.Timeout(30.0, connect=5.0))
+        if response.status_code >= 500:
+            response.raise_for_status()
+        return response
 
     def refresh_access_token(self):
         # 1. 尝试从文件加载最新Token
@@ -236,7 +252,7 @@ class OpenAPI_115:
         }
         
         try:
-            response = requests.post(url, headers=header, data=data, timeout=(5, 30))
+            response = self._refresh_token_request(url, header, data)
             res = response.json()
         except Exception as e:
             init.logger.warn(f"刷新Token请求异常: {e}")
@@ -263,37 +279,42 @@ class OpenAPI_115:
             "User-Agent": init.USER_AGENT
         }
 
-    def _make_api_request(self, method: str, url: str, params=None, data=None, headers=None):
-        """统一的API请求方法"""
+    def _acquire_request_slot(self):
+        """获取请求槽位（限流 + 风控）"""
         with self.lock:
-            # 1. 检查风控计数
             if self.check_risk():
                 return {"code": -1, "message": "今日请求即将到达上限！请明日再试！"}
-            
-            # 2. 智能流控：确保请求间隔至少 0.5s (即最大 2 QPS)
             min_interval = 0.5
-            current_time = time.time()
-            elapsed = current_time - self.last_req_time
-            
+            elapsed = time.time() - self.last_req_time
             if elapsed < min_interval:
                 time.sleep(min_interval - elapsed)
-            
             self.last_req_time = time.time()
-            
-            if headers is None:
-                headers = self._get_headers()
-        
-        if method.upper() == 'GET':
-            response = requests.get(url, headers=headers, params=params, timeout=(5, 30))
-        elif method.upper() == 'POST':
-            response = requests.post(url, headers=headers, data=data, timeout=(5, 30))
-        else:
-            raise ValueError(f"不支持的HTTP方法: {method}")
+        return None
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=0.5, min=0.5, max=10) + wait_random(0, 0.5),
+        retry=retry_if_exception(_retryable_httpx_exception) | retry_if_result(_retryable_5xx_result),
+        retry_error_callback=_return_last_outcome,
+        reraise=False,
+    )
+    def _make_api_request(self, method: str, url: str, params=None, data=None, headers=None):
+        """统一的API请求方法，每次 attempt（含重试）都重新走限流"""
+        risk_resp = self._acquire_request_slot()
+        if risk_resp:
+            return risk_resp
+
+        if headers is None:
+            headers = self._get_headers()
+
+        timeout = httpx.Timeout(30.0, connect=5.0)
+        response = httpx.request(method.upper(), url, headers=headers, params=params, data=data, timeout=timeout)
+
         if response.status_code == 200:
             return response.json()
-        else:
-            init.logger.warn(f"API请求失败: {response.status_code} - {response.text}")
-            return {"code": response.status_code, "message": response.text}
+
+        init.logger.warn(f"API请求失败: {response.status_code} - {response.text}")
+        return {"code": response.status_code, "message": response.text, "_http_status": response.status_code}
     
     @handle_token_expiry
     def get_file_info(self, path: str):
