@@ -37,7 +37,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /app
 
 # 4. 安装 Python 依赖 (先复制锁文件以利用 Docker 缓存)
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-install-project --no-dev && \
     # 针对 amd64 安装 Chrome driver (arm64 使用 apt 安装的 chromium-driver)
     if [ "$(dpkg --print-architecture)" = "amd64" ]; then uv run seleniumbase install chromedriver; fi
