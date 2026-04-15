@@ -3,6 +3,7 @@
 import time
 import asyncio
 import threading
+from importlib.metadata import version as pkg_version
 from telegram import Update, BotCommand
 from telegram.ext import ContextTypes, CommandHandler, Application
 from telegram.helpers import escape_markdown
@@ -25,7 +26,7 @@ from app.handlers.rss_handler import register_rss_handlers
 
 
 def get_version(md_format: bool = False) -> str:
-    version = "v3.4.1"
+    version = f"v{pkg_version('telegram-115bot')}"
     if md_format:
         return escape_markdown(version, version=2)
     return version
