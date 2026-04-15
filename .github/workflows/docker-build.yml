@@ -50,13 +50,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: docker.io
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+      # Docker Hub login disabled - this is a fork repo without DockerHub secrets
+      # - name: Log in to Docker Hub
+      #   if: github.event_name != 'pull_request'
+      #   uses: docker/login-action@v3
+      #   with:
+      #     registry: docker.io
+      #     username: ${{ secrets.DOCKER_USERNAME }}
+      #     password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
@@ -186,20 +187,19 @@ jobs:
 
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             # PR 只构建测试，使用特殊标签
-            TAGS="${DOCKERHUB}:pr-${{ github.event.number }}"
-            TAGS="${TAGS},${GHCR}:pr-${{ github.event.number }}"
+            TAGS="${GHCR}:pr-${{ github.event.number }}"
             echo "🔄 PR build - Tag: pr-${{ github.event.number }}"
           else
-            # Docker Hub 标签
-            TAGS="${DOCKERHUB}:latest"
-            TAGS="${TAGS},${DOCKERHUB}:beta"
-            TAGS="${TAGS},${DOCKERHUB}:${VERSION}"
+            # Docker Hub disabled for fork repo
+            # TAGS="${DOCKERHUB}:latest"
+            # TAGS="${TAGS},${DOCKERHUB}:beta"
+            # TAGS="${TAGS},${DOCKERHUB}:${VERSION}"
             # GHCR 标签
-            TAGS="${TAGS},${GHCR}:latest"
+            TAGS="${GHCR}:latest"
             TAGS="${TAGS},${GHCR}:beta"
             TAGS="${TAGS},${GHCR}:${VERSION}"
 
-            echo "🏷️ Building with tags for Docker Hub + GHCR:"
+            echo "🏷️ Building with tags for GHCR:"
             echo "   📌 latest"
             echo "   🧪 beta"
             echo "   🔢 ${VERSION}"
@@ -255,42 +255,27 @@ jobs:
           # 添加详细输出
           outputs: type=registry,push=true
           
-      - name: Verify Docker Hub push success
+      - name: Verify GHCR push success
         run: |
-          echo "🔍 Verifying images were pushed to Docker Hub..."
+          echo "🔍 Verifying images were pushed to GHCR..."
           echo "📋 Expected tags: ${{ steps.tags.outputs.tags }}"
-          
-          # 等待几秒让 Docker Hub 处理
+
+          # 等待几秒让 registry 处理
           sleep 10
-          
+
           # 检查每个标签
           for tag in $(echo "${{ steps.tags.outputs.tags }}" | tr ',' '\n'); do
             echo ""
             echo "🏷️ Checking tag: $tag"
             echo "----------------------------------------"
-            
-            # 方法1: 使用 docker buildx imagetools inspect
+
             if docker buildx imagetools inspect $tag; then
               echo "✅ Tag $tag exists and supports multi-platform"
             else
               echo "❌ Failed to verify tag $tag"
             fi
-            
-            # 方法2: 使用 Docker Hub API 检查
-            echo "🌐 Checking via Docker Hub API..."
-            IMAGE_NAME=$(echo $tag | cut -d':' -f1)
-            TAG_NAME=$(echo $tag | cut -d':' -f2)
-            API_URL="https://hub.docker.com/v2/repositories/${IMAGE_NAME}/tags/${TAG_NAME}/"
-            
-            if curl -f -s "$API_URL" > /dev/null; then
-              echo "✅ Tag $tag confirmed via API"
-              # 显示架构信息
-              curl -s "$API_URL" | jq -r '.images[]? | "  - \(.architecture)/\(.os)"' || echo "  - API response parsing failed"
-            else
-              echo "❌ Tag $tag not found via API"
-            fi
           done
-          
+
           echo ""
           echo "🎯 推送验证完成！如果看到 ✅ 说明推送成功"
           
@@ -298,11 +283,6 @@ jobs:
         if: github.event_name != 'pull_request'
         run: |
           echo "## 🐳 Docker Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📦 Docker Hub:" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.DOCKERHUB_IMAGE }}:latest\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.DOCKERHUB_IMAGE }}:beta\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.DOCKERHUB_IMAGE }}:${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📦 GitHub Packages (GHCR):" >> $GITHUB_STEP_SUMMARY
           echo "- \`${{ env.GHCR_IMAGE }}:latest\`" >> $GITHUB_STEP_SUMMARY
@@ -319,14 +299,11 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🚀 Usage:" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "# Docker Hub" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${{ env.DOCKERHUB_IMAGE }}:latest" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "# GitHub Packages" >> $GITHUB_STEP_SUMMARY
           echo "docker pull ${{ env.GHCR_IMAGE }}:latest" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "# Specific version" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${{ env.DOCKERHUB_IMAGE }}:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.GHCR_IMAGE }}:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Create GitHub Release
