@@ -62,7 +62,7 @@ APP = "/app"
 CONFIG = "/config"
 # Temp path
 TEMP = "/tmp"
-IMAGE_PATH = "/app/images"
+IMAGE_PATH = "/app/app/images"
 
 
 def require_bot_config() -> BotConfig:
