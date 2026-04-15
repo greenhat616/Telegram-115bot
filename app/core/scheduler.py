@@ -15,10 +15,10 @@ from app.core.offline_task_retry import offline_task_retry
 scheduler = BackgroundScheduler()
 
 def get_sync_time(category):
+    config = init.require_bot_config()
     sync_time = {'hour': 3, 'minute': 0}  # 默认时间03:00
     if category == "sehua":
-        # 使用 or {} 处理配置项为 None 的情况，避免 AttributeError
-        sehua_config = init.bot_config.sehua_spider
+        sehua_config = config.sehua_spider
         sehua_sync_time = sehua_config.sync_time
         try:
             hour, minute = map(int, sehua_sync_time.split(":"))
@@ -30,7 +30,7 @@ def get_sync_time(category):
     
     if category == "jav":
         # 使用 or {} 处理配置项为 None 的情况，避免 AttributeError
-        jav_config = init.bot_config.av_daily_update
+        jav_config = config.av_daily_update
         jav_sync_time = jav_config.sync_time
         try:
             hour, minute = map(int, jav_sync_time.split(":"))
@@ -44,11 +44,12 @@ def get_sync_time(category):
 
 def clear_request_count():
     """清除115请求计数"""
-    init.logger.info(f"昨日累计115 OpenAPI请求次数: [{init.openapi_115.request_count}]")
-    cache_hit_rate = (init.openapi_115.cache_hit / init.openapi_115.request_count * 100) if init.openapi_115.request_count > 0 else 0
+    api = init.require_openapi_115()
+    init.logger.info(f"昨日累计115 OpenAPI请求次数: [{api.request_count}]")
+    cache_hit_rate = (api.cache_hit / api.request_count * 100) if api.request_count > 0 else 0
     init.logger.info(f"昨日累计115 缓存命中率: [{cache_hit_rate:.2f}%]")
     init.logger.info("正在重置115请求计数...")
-    init.openapi_115.clear_request_count()
+    api.clear_request_count()
     init.logger.info("115请求计数已重置！")
 
 # 定义任务列表

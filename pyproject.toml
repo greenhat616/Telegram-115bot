@@ -34,3 +34,23 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+
+[tool.ty.src]
+include = ["app", "create_tg_session_file.py"]
+
+[tool.ty.analysis]
+# telethon uses heavy metaprogramming that confuses static type checkers
+replace-imports-with-any = ["telethon.**"]
+
+# ConversationHandler generic parameters and TelegramClient kwargs
+# cause unavoidable type friction with strict checking
+[[tool.ty.overrides]]
+include = ["app/handlers/*.py"]
+[tool.ty.overrides.rules]
+invalid-argument-type = "warn"
+
+[[tool.ty.overrides]]
+include = ["create_tg_session_file.py"]
+[tool.ty.overrides.rules]
+invalid-argument-type = "warn"
+invalid-await = "warn"

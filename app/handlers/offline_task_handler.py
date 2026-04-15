@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from app import init
+from app.utils.ptb_helpers import require_message, require_query, require_chat, require_user, require_user_data
 from app.utils.sqlitelib import SqlLiteLib
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters, CallbackQueryHandler
@@ -51,7 +52,7 @@ def try_to_offline2115_again():
     for offline_tasks in create_offline_url_list:
         if not offline_tasks:
             continue
-        offline_success = init.openapi_115.offline_download_specify_path(offline_tasks, failed_tasks[0]['save_path'])
+        offline_success = init.require_openapi_115().offline_download_specify_path(offline_tasks, failed_tasks[0]['save_path'])
         if offline_success:
             init.logger.info(f"重试任务 {offline_tasks} 添加离线成功")
         else:
@@ -61,7 +62,7 @@ def try_to_offline2115_again():
     time.sleep(300)  # 等待5秒，确保任务状态更新
     
     success_list= []
-    offline_task_status = init.openapi_115.get_offline_tasks()
+    offline_task_status = init.require_openapi_115().get_offline_tasks()
     for failed_task in failed_tasks:
         task_id = failed_task['id']
         link = failed_task['magnet']
@@ -74,20 +75,20 @@ def try_to_offline2115_again():
                     resource_name = task['name']
                     init.logger.info(f"重试任务 {title} 下载完成！")
                     # 处理下载成功后的清理和重命名准备
-                    if init.openapi_115.is_directory(f"{save_path}/{resource_name}"):
+                    if init.require_openapi_115().is_directory(f"{save_path}/{resource_name}"):
                         # 清除垃圾文件
-                        init.openapi_115.auto_clean_all(f"{save_path}/{resource_name}")
+                        init.require_openapi_115().auto_clean_all(f"{save_path}/{resource_name}")
                         old_name = f"{save_path}/{resource_name}"
                     else:
-                        init.openapi_115.create_dir_for_file(f"{save_path}", "temp")
+                        init.require_openapi_115().create_dir_for_file(f"{save_path}", "temp")
                         # 移动文件到临时目录
-                        init.openapi_115.move_file(f"{save_path}", f"{save_path}/temp")
+                        init.require_openapi_115().move_file(f"{save_path}", f"{save_path}/temp")
                         old_name = f"{save_path}/temp"
                     
                     # 执行重命名
-                    init.openapi_115.rename(old_name, title)
+                    init.require_openapi_115().rename(old_name, title)
                     new_final_path = f"{save_path}/{title}"
-                    file_list = init.openapi_115.get_files_from_dir(new_final_path)
+                    file_list = init.require_openapi_115().get_files_from_dir(new_final_path)
                     # 创建软链
                     from app.handlers.download_handler import create_strm_file, notice_emby_scan_library
                     create_strm_file(new_final_path, file_list)
@@ -122,7 +123,7 @@ def try_to_offline2115_again():
                             init.logger.info(f"cover_url: {cover_url}")
                             # 发送通知给授权用户
                             add_task_to_queue(
-                                init.bot_config.allowed_user, 
+                                init.require_bot_config().allowed_user, 
                                 cover_url, 
                                 message=message
                             )
@@ -131,7 +132,7 @@ def try_to_offline2115_again():
                         except Exception as e:
                             init.logger.warn(f"Unexpected error: {e}")
                     else:
-                        add_task_to_queue(init.bot_config.allowed_user, None, message=message)
+                        add_task_to_queue(init.require_bot_config().allowed_user, None, message=message)
                     
                     # 标记任务为完成
                     mark_task_as_completed(task_id)
@@ -142,12 +143,12 @@ def try_to_offline2115_again():
                     # 更新重试次数
                     update_retry_time(task_id)
                     # 删除失败资源
-                    init.openapi_115.del_offline_task(task['info_hash'])
+                    init.require_openapi_115().del_offline_task(task['info_hash'])
                 break
     # 清除云端任务
     for info_hash in success_list:
         init.logger.info(f"清除云端任务 {info_hash} ...")
-        init.openapi_115.del_offline_task(info_hash, del_source_file=0)
+        init.require_openapi_115().del_offline_task(info_hash, del_source_file=0)
         time.sleep(2)
     
 
@@ -156,7 +157,7 @@ async def view_retry_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """查看重试任务列表"""
     retry_list = get_failed_tasks()
     if not retry_list:
-        await update.message.reply_text("🈳当前重试列表为空")
+        await require_message(update).reply_text("🈳当前重试列表为空")
         return
    
     retry_text = "**重试列表：**\n\n"
@@ -171,13 +172,14 @@ async def view_retry_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(retry_text, reply_markup=reply_markup, parse_mode='MarkdownV2')
+    await require_message(update).reply_text(retry_text, reply_markup=reply_markup, parse_mode='MarkdownV2')
     
     
 async def handle_clear_retry_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """处理清空重试列表的回调"""
-    query = update.callback_query
+    query = require_query(update)
     await query.answer()
+    assert query.data is not None
     callback_data = query.data
     
     if callback_data == "clear_all":

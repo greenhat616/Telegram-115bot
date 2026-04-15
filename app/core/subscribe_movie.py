@@ -38,7 +38,7 @@ def get_tmdb_id(movie_name, page=1):
         for link in all_movie_links:
             # 提取电影ID
             href = link.get('href', '')
-            movie_id = href.split('/')[-1].split('-')[0] if href else 'N/A'
+            movie_id = href.split('/')[-1].split('-')[0] if href else 'N/A'  # ty:ignore[unresolved-attribute]
             
             # 提取中文标题
             h2_tag = link.find('h2')
@@ -152,24 +152,24 @@ def check_condition(res, key):
             if isinstance(quality, str):
                 if "Dolby Vision" == quality or "dolby vision" == quality.lower():
                     is_dolby_vision = True
-        if init.bot_config.sub_condition.dolby_vision and is_dolby_vision:
+        if init.require_bot_config().sub_condition.dolby_vision and is_dolby_vision:
             score += 10
         if zh_sub == 1:
              score += 10
-        for index, cfg_resolution in enumerate(init.bot_config.sub_condition.resolution_priority, 0):
+        for index, cfg_resolution in enumerate(init.require_bot_config().sub_condition.resolution_priority, 0):
             if resolution:
                 if str(cfg_resolution) in resolution or str(cfg_resolution) in movie_name:
-                    score += len(init.bot_config.sub_condition.resolution_priority) - index
+                    score += len(init.require_bot_config().sub_condition.resolution_priority) - index
             else:
                 if str(cfg_resolution) in movie_name:
-                    score += len(init.bot_config.sub_condition.resolution_priority) - index
+                    score += len(init.require_bot_config().sub_condition.resolution_priority) - index
         res_list.append({'score': score, 'download_url': download_url, 'size': size, 'zh_sub': zh_sub, 'is_dolby_vision': is_dolby_vision})
     if res_list:
         # 按分数从高到低排序
         sorted_res_list = sorted(res_list, key=lambda x: x['score'], reverse=True)
         highest_score_item = None
         for item in sorted_res_list:
-            if init.bot_config.sub_condition.dolby_vision:
+            if init.require_bot_config().sub_condition.dolby_vision:
                 # 必须同时满足杜比卫视和中字
                 if item['zh_sub'] == 0 or item['is_dolby_vision'] == False:
                     continue
@@ -185,8 +185,8 @@ def check_condition(res, key):
 def get_response_from_api(url):
     headers = {
         "User-Agent": init.USER_AGENT,
-        "X-APP-ID": init.bot_config.x_app_id,
-        "X-API-KEY": init.bot_config.x_api_key
+        "X-APP-ID": init.require_bot_config().x_app_id,
+        "X-API-KEY": init.require_bot_config().x_api_key
     }
     response = http_request("GET", url, headers=headers, timeout=(5, 30))
     return response.json()
@@ -196,28 +196,28 @@ def download_from_link(download_url, movie_name, save_path):
     info_hash = ""
     try: 
         # 调用离线下载API，捕获可能的异常
-        offline_success = init.openapi_115.offline_download_specify_path(download_url, save_path)
+        offline_success = init.require_openapi_115().offline_download_specify_path(download_url, save_path)
         if not offline_success:
             init.logger.error(f"❌ 离线遇到错误！")
         else:
             init.logger.info(f"✅ [`{download_url}`]添加离线成功")
-            download_success, resource_name, info_hash = init.openapi_115.check_offline_download_success(download_url)
+            download_success, resource_name, info_hash = init.require_openapi_115().check_offline_download_success(download_url)
             if download_success:
                 init.logger.info(f"✅ [{resource_name}]离线下载完成")
                 time.sleep(1)
-                if init.openapi_115.is_directory(f"{save_path}/{resource_name}"):
+                if init.require_openapi_115().is_directory(f"{save_path}/{resource_name}"):
                     # 清除垃圾文件
-                    init.openapi_115.auto_clean_all(f"{save_path}/{resource_name}")
+                    init.require_openapi_115().auto_clean_all(f"{save_path}/{resource_name}")
                     # 重名名资源
-                    init.openapi_115.rename(f"{save_path}/{resource_name}", movie_name)
+                    init.require_openapi_115().rename(f"{save_path}/{resource_name}", movie_name)
                 else:
                     # 创建文件夹
-                    init.openapi_115.create_dir_for_file(f"{save_path}", movie_name)
+                    init.require_openapi_115().create_dir_for_file(f"{save_path}", movie_name)
                     # 移动文件到电影文件夹
-                    init.openapi_115.move_file(f"{save_path}/{resource_name}", f"{save_path}/{movie_name}")
+                    init.require_openapi_115().move_file(f"{save_path}/{resource_name}", f"{save_path}/{movie_name}")
 
                 # 读取目录下所有文件
-                file_list = init.openapi_115.get_files_from_dir(f"{save_path}/{movie_name}")
+                file_list = init.require_openapi_115().get_files_from_dir(f"{save_path}/{movie_name}")
                 # 创建软链
                 create_strm_file(f"{save_path}/{movie_name}", file_list)
                 # 通知Emby扫库
@@ -225,17 +225,17 @@ def download_from_link(download_url, movie_name, save_path):
                 return True
             else:
                 # 下载超时删除任务
-                init.openapi_115.del_offline_task(info_hash)
+                init.require_openapi_115().del_offline_task(info_hash)
                 init.logger.warn(f"😭离线下载超时，稍后将再次尝试!")
                 return False
     except Exception as e:
         init.logger.error(f"💀下载遇到错误: {str(e)}")
-        add_task_to_queue(init.bot_config.allowed_user, f"{init.IMAGE_PATH}/male023.png",
+        add_task_to_queue(init.require_bot_config().allowed_user, f"{init.IMAGE_PATH}/male023.png",
                             message=f"❌ 下载任务执行出错: {escape_markdown(str(e), version=2)}")
         return False
     finally:
         # 清除云端任务，避免重复下载
-        init.openapi_115.del_offline_task(info_hash, del_source_file=0)
+        init.require_openapi_115().del_offline_task(info_hash, del_source_file=0)
     
     
 def send_message2usr(tmdb_id, sqlite):

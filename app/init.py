@@ -64,6 +64,19 @@ CONFIG = "/config"
 TEMP = "/tmp"
 IMAGE_PATH = "/app/images"
 
+def require_bot_config() -> BotConfig:
+    """获取已初始化的 BotConfig，未初始化时抛出 RuntimeError"""
+    if bot_config is None:
+        raise RuntimeError("bot_config must be initialized before use")
+    return bot_config
+
+def require_openapi_115() -> OpenAPI_115:
+    """获取已初始化的 OpenAPI_115，未初始化时抛出 RuntimeError"""
+    if openapi_115 is None:
+        raise RuntimeError("openapi_115 must be initialized before use")
+    return openapi_115
+
+
 def _get_system_chrome_version():
     """获取系统安装的 Chrome/Chromium 版本"""
     try:
@@ -189,6 +202,7 @@ def initialize_tg_usr_client():
     :return: bool - 初始化是否成功
     """
     global tg_user_client, bot_config, logger
+    assert bot_config is not None, "bot_config must be loaded before initializing TG client"
     try:
         # 兼容老版本的配置项拼写错误
         if bot_config.bote_name:
@@ -232,7 +246,7 @@ def initialize_tg_usr_client():
                 parsed = urlparse(target_proxy)
                 if parsed.hostname and parsed.port:
                     # 支持用户名和密码认证
-                    client_params['proxy'] = (socks.HTTP, parsed.hostname, parsed.port, True, parsed.username, parsed.password)
+                    client_params['proxy'] = (socks.HTTP, parsed.hostname, parsed.port, True, parsed.username, parsed.password)  # ty:ignore[invalid-assignment]
                     auth_info = f" (user: {parsed.username})" if parsed.username else ""
                     logger.info(f"Telegram 已启用HTTP代理: {parsed.hostname}:{parsed.port}{auth_info}")
                 else:
@@ -288,6 +302,7 @@ def create_tg_session_file():
     创建或验证Telegram session文件
     如果session文件存在但已过期，会重新创建
     """
+    assert bot_config is not None
     tg_api_id = bot_config.tg_api_id or ""
     tg_api_hash = bot_config.tg_api_hash or ""
     
@@ -327,6 +342,7 @@ def create_tg_session_file():
 def init_aria2():
     from app.utils.aria2 import create_aria2_client
     global aria2_client
+    assert bot_config is not None
     if not bot_config.aria2.enable:
         logger.info("Aria2功能未启用，跳过Aria2客户端初始化。")
         aria2_client = None

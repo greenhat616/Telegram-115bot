@@ -74,7 +74,7 @@ def _return_last_response_or_raise(retry_state: RetryCallState):
     outcome = retry_state.outcome
     assert outcome is not None
     if outcome.failed:
-        raise outcome.exception()
+        raise outcome.exception()  # ty:ignore[invalid-raise]
     return outcome.result()
 
 

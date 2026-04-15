@@ -23,7 +23,7 @@ def get_max_page(html_content):
         href = link.get('href')
         if href and 'page=' in href:
             # 从href中提取页码数字
-            page_num = int(href.split('page=')[1])
+            page_num = int(href.split('page=')[1])  # ty:ignore[unresolved-attribute]
             page_numbers.append(page_num)
         elif link.text.isdigit():
             # 如果链接没有href但有数字文本
@@ -190,7 +190,7 @@ def save_av_daily_update2db(results):
             
 def av_daily_update():
     # 检查配置是否启用AV日更
-    if not init.bot_config.av_daily_update.enable:
+    if not init.require_bot_config().av_daily_update.enable:
         init.logger.info("AV日更功能未启用，跳过更新。")
         return
     

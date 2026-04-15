@@ -185,7 +185,7 @@ def parse_t66y_html(html_content):
     magnet_pattern = re.compile(r"magnet:\?xt=urn:btih:[a-zA-Z0-9]{32,40}", re.IGNORECASE)
     
     if magnet_pattern.search(html_content):
-        magnet = magnet_pattern.search(html_content).group(0)
+        magnet = magnet_pattern.search(html_content).group(0)  # ty:ignore[unresolved-attribute]
 
     if not magnet:
         # Use the last link
@@ -234,16 +234,16 @@ async def start_t66y_rss_async(section_name):
     browser = None
     try:
         # Initialize browser
-        rss_host = init.bot_config.rsshub.rss_host
+        rss_host = init.require_bot_config().rsshub.rss_host
         browser = SeleniumBrowser(rss_host)
         await browser.init_browser()
 
         if not browser.driver:
              init.logger.error("浏览器初始化失败，无法继续任务！")
-             add_task_to_queue(init.bot_config.allowed_user, None, f"❌ 浏览器初始化失败，无法继续任务！")
+             add_task_to_queue(init.require_bot_config().allowed_user, None, f"❌ 浏览器初始化失败，无法继续任务！")
              return
 
-        t66y = init.bot_config.rsshub.t66y
+        t66y = init.require_bot_config().rsshub.t66y
 
         for section in t66y.sections:
             if section_name and section.name != section_name:
@@ -253,7 +253,7 @@ async def start_t66y_rss_async(section_name):
                 init.logger.warning(f"未知的t66y版块名称: {section.name}，跳过该版块的RSS订阅")
                 continue
             rss_url = f"{rss_host.rstrip('/')}/t66y/{section_id}/today?format=json"
-            response = http_request("GET", rss_url, timeout=init.bot_config.rsshub.t66y.timeout)
+            response = http_request("GET", rss_url, timeout=init.require_bot_config().rsshub.t66y.timeout)
             if response.status_code != 200:
                 init.logger.error(f"无法获取t66y RSS订阅，HTTP状态码: {response.status_code}")
                 continue
@@ -264,7 +264,7 @@ async def start_t66y_rss_async(section_name):
             save2DB_t66y(pares_results)
     except Exception as e:
         init.logger.error(f"处理t66y RSS订阅时出错: {e}")
-        add_task_to_queue(init.bot_config.allowed_user, None, f"❌ 处理t66y RSS订阅时出错: {e}")
+        add_task_to_queue(init.require_bot_config().allowed_user, None, f"❌ 处理t66y RSS订阅时出错: {e}")
     finally:
         if browser:
             await browser.close()

@@ -152,10 +152,10 @@ class VideoDownloadManager:
             sha1 = self._calculate_sha1(file_path)
             
             # 确保目录存在
-            init.openapi_115.create_dir_recursive(save_dir)
+            init.require_openapi_115().create_dir_recursive(save_dir)
             
             # 上传
-            is_upload, bingo = init.openapi_115.upload_file(
+            is_upload, bingo = init.require_openapi_115().upload_file(
                 target=save_dir,
                 file_name=file_name,
                 file_size=file_size,

@@ -3,6 +3,7 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, ConversationHandler, CallbackQueryHandler
 from app import init
+from app.utils.ptb_helpers import require_message, require_query, require_chat, require_user, require_user_data
 import asyncio
 import shutil
 from pathlib import Path
@@ -16,38 +17,39 @@ SELECT_MAIN_CATEGORY_SYNC, SELECT_SUB_CATEGORY_SYNC = range(30, 32)
 
 
 async def sync_strm_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    usr_id = update.message.from_user.id
+    usr_id = require_user(update).id
     if not init.check_user(usr_id):
-        await update.message.reply_text("⚠️ 对不起，您无权使用115机器人！")
+        await require_message(update).reply_text("⚠️ 对不起，您无权使用115机器人！")
         return ConversationHandler.END
 
     # 显示主分类（电影/剧集）
     keyboard = [
         [InlineKeyboardButton(f"📁 {category.display_name}", callback_data=category.name)] for category in
-        init.bot_config.category_folder
+        init.require_bot_config().category_folder
     ]
     # 添加退出按钮
     keyboard.append([InlineKeyboardButton("退出", callback_data="quit")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="❓请选择要同步的分类：",
+    await context.bot.send_message(chat_id=require_chat(update).id, text="❓请选择要同步的分类：",
                                    reply_markup=reply_markup)
     return SELECT_MAIN_CATEGORY_SYNC
 
 
 async def select_main_category_sync(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
+    query = require_query(update)
     await query.answer()
+    assert query.data is not None
 
     selected_main_category = query.data
     if selected_main_category == "return":
         # 显示主分类
         keyboard = [
             [InlineKeyboardButton(f"📁 {category.display_name}", callback_data=category.name)]
-            for category in init.bot_config.category_folder
+            for category in init.require_bot_config().category_folder
         ]
         keyboard.append([InlineKeyboardButton("退出", callback_data="quit")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await context.bot.send_message(chat_id=update.effective_chat.id,
+        await context.bot.send_message(chat_id=require_chat(update).id,
                                        text="❓请选择要同步的分类：",
                                        reply_markup=reply_markup)
         return SELECT_MAIN_CATEGORY_SYNC
@@ -55,9 +57,9 @@ async def select_main_category_sync(update: Update, context: ContextTypes.DEFAUL
         # 直接退出会话
         return await quit_conversation(update, context)
     else:
-        context.user_data["selected_main_category"] = selected_main_category
+        require_user_data(context)["selected_main_category"] = selected_main_category
         sub_categories = [
-            item.path_map for item in init.bot_config.category_folder if item.name == selected_main_category
+            item.path_map for item in init.require_bot_config().category_folder if item.name == selected_main_category
         ][0]
 
         # 创建子分类按钮
@@ -71,29 +73,29 @@ async def select_main_category_sync(update: Update, context: ContextTypes.DEFAUL
     
 
 async def select_sub_category_sync(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
+    query = require_query(update)
     await query.answer()
     # 获取用户选择的路径 "/影视/电影/外语电影/"
     selected_path = query.data
     if selected_path == "quit":
         return await quit_conversation(update, context)
-    mount_root = Path(init.bot_config.mount_root)
-    strm_root = Path(init.bot_config.strm_root)
-    openlist_root = Path(init.bot_config.openlist_root)
+    mount_root = Path(init.require_bot_config().mount_root)
+    strm_root = Path(init.require_bot_config().strm_root)
+    openlist_root = Path(init.require_bot_config().openlist_root)
     init.logger.debug(f"selected_path: {selected_path}")
     try:
-        strm_mode = init.bot_config.strm_mode
+        strm_mode = init.require_bot_config().strm_mode
         if strm_mode == "disable":
             await query.edit_message_text(text="⚠️ 当前strm同步功能已禁用！")
             return ConversationHandler.END
         # 递归删除所有
-        sync_path = strm_root / Path(selected_path).relative_to("/")
+        sync_path = strm_root / Path(selected_path).relative_to("/")  # ty:ignore[invalid-argument-type]
         if sync_path.exists() and sync_path.is_dir():
             shutil.rmtree(str(sync_path))
 
         await query.edit_message_text(text=f"🔄[{selected_path}]正在同步strm文件，请稍后...")
         # 获取视频文件列表（移至线程池避免阻塞主事件循环）
-        video_files = await asyncio.to_thread(init.openapi_115.get_sync_dir, selected_path)
+        video_files = await asyncio.to_thread(init.require_openapi_115().get_sync_dir, selected_path)
         for file in video_files:
             try:
                 # file = "FC2-PPV-4750727/hhd800.com@FC2-PPV-4750727.mp4"
@@ -134,7 +136,7 @@ async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
         await update.callback_query.edit_message_text(text="🚪用户退出本次会话")
     else:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="🚪用户退出本次会话")
+        await context.bot.send_message(chat_id=require_chat(update).id, text="🚪用户退出本次会话")
     return ConversationHandler.END
 
 def create_movie_directory(sync_path, movie_path):
@@ -159,12 +161,12 @@ def create_movie_directory(sync_path, movie_path):
 def register_sync_handlers(application):
     # 同步strm软链
     sync_handler = ConversationHandler(
-        entry_points=[CommandHandler("sync", sync_strm_files)],
+        entry_points=[CommandHandler("sync", sync_strm_files)],  # ty:ignore[invalid-argument-type]
         states={
             SELECT_MAIN_CATEGORY_SYNC: [CallbackQueryHandler(select_main_category_sync)],
             SELECT_SUB_CATEGORY_SYNC: [CallbackQueryHandler(select_sub_category_sync)],
-        },
-        fallbacks=[CommandHandler("q", quit_conversation)],
+        },  # ty:ignore[invalid-argument-type]
+        fallbacks=[CommandHandler("q", quit_conversation)],  # ty:ignore[invalid-argument-type]
         per_chat=True,
         conversation_timeout=300,
     )

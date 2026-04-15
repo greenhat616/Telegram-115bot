@@ -96,13 +96,13 @@ class OpenAPI_115:
     def get_token(self):
         if not self.refresh_token or not self.access_token:
             if not os.path.exists(init.TOKEN_FILE):
-                app_id = init.bot_config.app_115_id
+                app_id = init.require_bot_config().app_115_id
                 if app_id and str(app_id).lower() != "your_115_app_id":
                     init.logger.info("正在进入PKCE授权流程，获取refresh_token...")
-                    self.auth_pkce(init.bot_config.allowed_user, app_id)
+                    self.auth_pkce(init.require_bot_config().allowed_user, app_id)
                 else:
-                    _access_token = init.bot_config.access_token or ''
-                    _refresh_token = init.bot_config.refresh_token or ''
+                    _access_token = init.require_bot_config().access_token or ''
+                    _refresh_token = init.require_bot_config().refresh_token or ''
                     if _access_token and _refresh_token and \
                        _access_token.lower() != "your_access_token" and \
                        _refresh_token.lower() != "your_refresh_token":
@@ -235,7 +235,7 @@ class OpenAPI_115:
             # 如果内存无token，且文件也无token（或文件不存在）
             if not file_refresh_token:
                 init.logger.warn("请先进行授权，获取refresh_token！")
-                add_task_to_queue(init.bot_config.allowed_user, "/app/images/male023.png", "请先进行授权，获取refresh_token！")
+                add_task_to_queue(init.require_bot_config().allowed_user, "/app/images/male023.png", "请先进行授权，获取refresh_token！")
                 return
             # 如果内存无token但文件有
             self.access_token = file_access_token
@@ -362,7 +362,7 @@ class OpenAPI_115:
     @handle_token_expiry
     def offline_download(self, download_url):
         url = f"{self.base_url}/open/offline/add_task_urls"
-        file_info = self.get_file_info(init.bot_config.offline_path)
+        file_info = self.get_file_info(init.require_bot_config().offline_path)
         if not file_info:
             init.logger.warn(f"获取离线下载目录信息失败: {file_info}")
             return False
@@ -1121,7 +1121,7 @@ class OpenAPI_115:
     
     def auto_clean(self, path):
         # 开关关闭直接返回
-        if str(init.bot_config.clean_policy.switch).lower() == "off":
+        if str(init.require_bot_config().clean_policy.switch).lower() == "off":
             return
         
         file_info = self.get_file_info(path)
@@ -1137,7 +1137,7 @@ class OpenAPI_115:
         
         # 换算字节大小
         byte_size = 0
-        less_than = init.bot_config.clean_policy.less_than
+        less_than = init.require_bot_config().clean_policy.less_than
         if less_than is not None:
             if str(less_than).upper().endswith("M"):
                 byte_size = int(less_than[:-1]) * 1024 * 1024
@@ -1164,7 +1164,7 @@ class OpenAPI_115:
             
     def auto_clean_by_id(self, file_id):
         # 开关关闭直接返回
-        if str(init.bot_config.clean_policy.switch).lower() == "off":
+        if str(init.require_bot_config().clean_policy.switch).lower() == "off":
             return
         params = {
             "cid": file_id,
@@ -1175,7 +1175,7 @@ class OpenAPI_115:
         
         # 换算字节大小
         byte_size = 0
-        less_than = init.bot_config.clean_policy.less_than
+        less_than = init.require_bot_config().clean_policy.less_than
         if less_than is not None:
             if str(less_than).upper().endswith("M"):
                 byte_size = int(less_than[:-1]) * 1024 * 1024
@@ -1202,7 +1202,7 @@ class OpenAPI_115:
     
     def auto_clean_all(self, path, clean_empty_dir=False):
          # 开关关闭直接返回
-        if str(init.bot_config.clean_policy.switch).lower() == "off":
+        if str(init.require_bot_config().clean_policy.switch).lower() == "off":
             return
         
         file_info = self.get_file_info(path)
@@ -1212,7 +1212,7 @@ class OpenAPI_115:
 
         # 换算字节大小
         byte_size = 0
-        less_than = init.bot_config.clean_policy.less_than
+        less_than = init.require_bot_config().clean_policy.less_than
         if less_than is not None:
             if str(less_than).upper().endswith("M"):
                 byte_size = int(less_than[:-1]) * 1024 * 1024
@@ -1519,7 +1519,7 @@ class OpenAPI_115:
         sha256_hash = hashlib.sha256(verifier.encode('utf-8')).digest()
         # Base64 URL 安全编码并移除填充字符
         challenge = base64.urlsafe_b64encode(sha256_hash).rstrip(b'=').decode('utf-8')
-        return verifier, challenge
+        return verifier, challenge  # ty:ignore[invalid-return-type]
     
 def file_sha1(file_path):
     with open(file_path, 'rb') as f:

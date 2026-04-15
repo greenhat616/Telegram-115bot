@@ -156,7 +156,7 @@ def get_av_cover(query):
             if not movie_link:
                 return
             link = movie_link['href']  # 获取href属性
-            if link and link.startswith('//'):
+            if link and link.startswith('//'):  # ty:ignore[unresolved-attribute]
                 link = f"https:{link}"
             img_tag = movie_link.find('img')
             if img_tag:

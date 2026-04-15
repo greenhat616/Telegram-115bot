@@ -24,7 +24,7 @@ executor = ThreadPoolExecutor(max_workers=10)
 
 # 最大订阅数量（延迟访问，避免模块加载时 bot_config 为 None）
 def _get_max_subscribe() -> int:
-    return init.bot_config.rsshub.javbus.max_subscribe if init.bot_config else 0
+    return init.require_bot_config().rsshub.javbus.max_subscribe if init.bot_config else 0
 
 async def rss_javbus(sub_category, rss_url, user_input):
     page = 1
@@ -104,7 +104,7 @@ async def get_content_from_rssurl(rss_url):
         # 使用 run_in_executor 将同步的 requests 调用转换为异步
         response = await loop.run_in_executor(
             executor, 
-            lambda: http_request("GET", rss_url, timeout=init.bot_config.rsshub.javbus.timeout)
+            lambda: http_request("GET", rss_url, timeout=init.require_bot_config().rsshub.javbus.timeout)
         )
         response.raise_for_status()
         return response.text
@@ -311,7 +311,7 @@ async def process_single_item(sub_category, item, user_input):
                 
                 # 补充提取发布日期 (如果前面没获取到)
                 if not publish_date:
-                    date_span = soup.find('span', string="發行日期:")
+                    date_span = soup.find('span', string="發行日期:")  # ty:ignore[no-matching-overload]
                     if date_span and date_span.parent:
                         publish_date = date_span.parent.get_text().replace("發行日期:", "").strip()
 
@@ -385,7 +385,7 @@ async def process_single_item(sub_category, item, user_input):
             return 0
     
 def get_save_path(sub_category, user_input):
-    category_list = init.bot_config.rsshub.javbus.category
+    category_list = init.require_bot_config().rsshub.javbus.category
     save_path = ""
     for category in category_list:
         if category.name == sub_category:

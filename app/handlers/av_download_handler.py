@@ -7,6 +7,7 @@ from telegram.ext import ContextTypes, CommandHandler, ConversationHandler, Call
 from telegram.error import TelegramError
 import time
 from app import init
+from app.utils.ptb_helpers import require_message, require_query, require_chat, require_user, require_user_data
 from app.utils.message_queue import add_task_to_queue
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -22,21 +23,21 @@ download_executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="AV_Dow
 SELECT_MAIN_CATEGORY, SELECT_SUB_CATEGORY = range(60, 62)
 
 async def start_av_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    usr_id = update.message.from_user.id
+    usr_id = require_user(update).id
     if not init.check_user(usr_id):
-        await update.message.reply_text("⚠️ 对不起，您无权使用115机器人！")
+        await require_message(update).reply_text("⚠️ 对不起，您无权使用115机器人！")
         return ConversationHandler.END
 
     if context.args:
         av_number = " ".join(context.args)
-        context.user_data["av_number"] = av_number  # 将用户参数存储起来
+        require_user_data(context)["av_number"] = av_number  # 将用户参数存储起来
     else:
-        await update.message.reply_text("⚠️ 请在'/av '命令后输入车牌！")
+        await require_message(update).reply_text("⚠️ 请在'/av '命令后输入车牌！")
         return ConversationHandler.END
     # 显示主分类（电影/剧集）
     keyboard = [
         [InlineKeyboardButton(f"📁 {category.display_name}", callback_data=category.name)] for category in
-        init.bot_config.category_folder
+        init.require_bot_config().category_folder
     ]
     # 只在有最后保存路径时才显示该选项
     if "av_last_save" in init.bot_session:
@@ -44,26 +45,26 @@ async def start_av_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append([InlineKeyboardButton(f"📁 上次保存: {last_save_path}", callback_data="last_save_path")])
     keyboard.append([InlineKeyboardButton("取消", callback_data="cancel")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="❓请选择要保存到哪个分类：",
+    await context.bot.send_message(chat_id=require_chat(update).id, text="❓请选择要保存到哪个分类：",
                                    reply_markup=reply_markup)
     return SELECT_MAIN_CATEGORY
 
 
 async def start_batch_download_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    usr_id = update.message.from_user.id
+    usr_id = require_user(update).id
     if not init.check_user(usr_id):
-        await update.message.reply_text("⚠️ 对不起，您无权使用115机器人！")
+        await require_message(update).reply_text("⚠️ 对不起，您无权使用115机器人！")
         return ConversationHandler.END
     
     if not update.message or not update.message.text:
-        await update.message.reply_text("⚠️ 没有检测到下载链接！")
+        await require_message(update).reply_text("⚠️ 没有检测到下载链接！")
         return ConversationHandler.END
     
-    context.user_data["dl_links"] = update.message.text
+    require_user_data(context)["dl_links"] = require_message(update).text
     # 显示主分类（电影/剧集）
     keyboard = [
         [InlineKeyboardButton(f"📁 {category.display_name}", callback_data=category.name)] for category in
-        init.bot_config.category_folder
+        init.require_bot_config().category_folder
     ]
     # 只在有最后保存路径时才显示该选项
     if "av_last_save" in init.bot_session:
@@ -71,35 +72,35 @@ async def start_batch_download_command(update: Update, context: ContextTypes.DEF
         keyboard.append([InlineKeyboardButton(f"📁 上次保存: {last_save_path}", callback_data="last_save_path")])
     keyboard.append([InlineKeyboardButton("取消", callback_data="cancel")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="❓请选择要保存到哪个分类：",
+    await context.bot.send_message(chat_id=require_chat(update).id, text="❓请选择要保存到哪个分类：",
                                    reply_markup=reply_markup)
     return SELECT_MAIN_CATEGORY
 
 async def download_from_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    usr_id = update.message.from_user.id
+    usr_id = require_user(update).id
     if not init.check_user(usr_id):
-        await update.message.reply_text(" 对不起，您无权使用115机器人！")
+        await require_message(update).reply_text(" 对不起，您无权使用115机器人！")
         return ConversationHandler.END
-    if (not update.message.document or 
-        not update.message.document.mime_type or 
-        update.message.document.mime_type != 'text/plain'):
-        await update.message.reply_text("⚠️ 请发送一个TXT文本文件，文件中每行一个下载链接！")
+    if (not require_message(update).document or 
+        not require_message(update).document.mime_type or  # ty:ignore[unresolved-attribute]
+        require_message(update).document.mime_type != 'text/plain'):  # ty:ignore[unresolved-attribute]
+        await require_message(update).reply_text("⚠️ 请发送一个TXT文本文件，文件中每行一个下载链接！")
         return ConversationHandler.END
     
-    file = await context.bot.get_file(update.message.document.file_id)
-    if file.file_size > 20 * 1024 * 1024:  # 20MB
-        await update.message.reply_text("⚠️ 文件太大，请发送小于20MB的文件！")
+    file = await context.bot.get_file(require_message(update).document.file_id)  # ty:ignore[unresolved-attribute]
+    if file.file_size > 20 * 1024 * 1024:  # 20MB  # ty:ignore[unsupported-operator]
+        await require_message(update).reply_text("⚠️ 文件太大，请发送小于20MB的文件！")
         return ConversationHandler.END
      # 下载文件
     file_content = await file.download_as_bytearray()
     text_content = file_content.decode('utf-8', errors='ignore')
     # 提取每行的链接
     links = check_file(text_content)
-    context.user_data["dl_links"] = links
+    require_user_data(context)["dl_links"] = links
     # 显示主分类（电影/剧集）
     keyboard = [
         [InlineKeyboardButton(f"📁 {category.display_name}", callback_data=category.name)] for category in
-        init.bot_config.category_folder
+        init.require_bot_config().category_folder
     ]
     # 只在有最后保存路径时才显示该选项
     if "av_last_save" in init.bot_session:
@@ -107,14 +108,15 @@ async def download_from_file(update: Update, context: ContextTypes.DEFAULT_TYPE)
         keyboard.append([InlineKeyboardButton(f"📁 上次保存: {last_save_path}", callback_data="last_save_path")])
     keyboard.append([InlineKeyboardButton("取消", callback_data="cancel")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="❓请选择要保存到哪个分类：",
+    await context.bot.send_message(chat_id=require_chat(update).id, text="❓请选择要保存到哪个分类：",
                                    reply_markup=reply_markup)
     return SELECT_MAIN_CATEGORY
 
 
 async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
+    query = require_query(update)
     await query.answer()
+    assert query.data is not None
 
     selected_main_category = query.data
     if selected_main_category == "cancel":
@@ -122,24 +124,24 @@ async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYP
     elif selected_main_category == "last_save_path":
         # 直接使用最后一次保存的路径
         if "av_last_save" in init.bot_session:
-            user_id = update.effective_user.id
+            user_id = require_user(update).id
             last_path = init.bot_session['av_last_save']
             # 批量磁力下载
-            if "dl_links" in context.user_data:
-                magnet_links = context.user_data["dl_links"]
-                await query.edit_message_text(f"✅ 已为您添加{len(magnet_links.splitlines())}个链接到下载队列！\n请稍后...")
+            if "dl_links" in require_user_data(context):
+                magnet_links = require_user_data(context)["dl_links"]
+                await query.edit_message_text(f"✅ 已为您添加{len(magnet_links.splitlines())}个链接到下载队列！\n请稍后...")  # ty:ignore[unresolved-attribute]
                 download_executor.submit(batch_download_task, magnet_links, last_path, user_id)
                 return ConversationHandler.END
             else:
-                av_number = context.user_data["av_number"]
-                context.user_data["selected_path"] = last_path
+                av_number = require_user_data(context)["av_number"]
+                require_user_data(context)["selected_path"] = last_path
                 
                 # 抓取磁力（移至线程池避免阻塞主事件循环）
                 await query.edit_message_text(f"🔍 正在搜索 [{av_number}] 的磁力链接...")
                 av_result = await asyncio.to_thread(get_av_result, av_number)
 
                 if not av_result:
-                    await query.edit_message_text(f"😵‍💫很遗憾，没有找到{av_number.upper()}的对应磁力~")
+                    await query.edit_message_text(f"😵‍💫很遗憾，没有找到{av_number.upper()}的对应磁力~")  # ty:ignore[unresolved-attribute]
                     return ConversationHandler.END
 
                 # 立即反馈用户
@@ -153,9 +155,9 @@ async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYP
             await query.edit_message_text("❌ 未找到最后一次保存路径，请重新选择分类")
             return ConversationHandler.END
     else:
-        context.user_data["selected_main_category"] = selected_main_category
+        require_user_data(context)["selected_main_category"] = selected_main_category
         sub_categories = [
-            item.path_map for item in init.bot_config.category_folder if item.name == selected_main_category
+            item.path_map for item in init.require_bot_config().category_folder if item.name == selected_main_category
         ][0]
 
         # 创建子分类按钮
@@ -171,7 +173,7 @@ async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def select_sub_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
+    query = require_query(update)
     await query.answer()
 
     # 获取用户选择的路径
@@ -179,25 +181,25 @@ async def select_sub_category(update: Update, context: ContextTypes.DEFAULT_TYPE
     if selected_path == "cancel":
         return await quit_conversation(update, context)
     
-    context.user_data["selected_path"] = selected_path
-    user_id = update.effective_user.id
+    require_user_data(context)["selected_path"] = selected_path
+    user_id = require_user(update).id
     
     # 保存最后一次使用的路径
-    init.bot_session['av_last_save'] = selected_path
+    init.bot_session['av_last_save'] = selected_path  # ty:ignore[invalid-assignment]
     
-    if "dl_links" in context.user_data:
-        magnet_links = context.user_data["dl_links"]
-        await query.edit_message_text(f"✅ 已为您添加{len(magnet_links.splitlines())}个链接到下载队列！\n请稍后...")
+    if "dl_links" in require_user_data(context):
+        magnet_links = require_user_data(context)["dl_links"]
+        await query.edit_message_text(f"✅ 已为您添加{len(magnet_links.splitlines())}个链接到下载队列！\n请稍后...")  # ty:ignore[unresolved-attribute]
         download_executor.submit(batch_download_task, magnet_links, selected_path, user_id)
         return ConversationHandler.END
     else:
-        av_number = context.user_data["av_number"]
+        av_number = require_user_data(context)["av_number"]
         # 抓取磁力（移至线程池避免阻塞主事件循环）
         await query.edit_message_text(f"🔍 正在搜索 [{av_number}] 的磁力链接...")
         av_result = await asyncio.to_thread(get_av_result, av_number)
 
         if not av_result:
-            await query.edit_message_text(f"😵‍💫很遗憾，没有找到{[av_number.upper()]}的对应磁力~")
+            await query.edit_message_text(f"😵‍💫很遗憾，没有找到{[av_number.upper()]}的对应磁力~")  # ty:ignore[unresolved-attribute]
             return ConversationHandler.END
         
         # 立即反馈用户
@@ -214,7 +216,7 @@ async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
         await update.callback_query.edit_message_text(text="🚪用户退出本次会话")
     else:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="🚪用户退出本次会话")
+        await context.bot.send_message(chat_id=require_chat(update).id, text="🚪用户退出本次会话")
     return ConversationHandler.END
 
 
@@ -249,12 +251,12 @@ def download_task(av_result, av_number, save_path, user_id):
             magnet = item['magnet']
             title = item['title']
             # 离线下载到115
-            offline_success = init.openapi_115.offline_download_specify_path(magnet, save_path)
+            offline_success = init.require_openapi_115().offline_download_specify_path(magnet, save_path)
             if not offline_success:
                 continue
             
             # 检查下载状态
-            download_success, resource_name, info_hash = init.openapi_115.check_offline_download_success(magnet)
+            download_success, resource_name, info_hash = init.require_openapi_115().check_offline_download_success(magnet)
             
             if download_success:
                 init.logger.info(f"✅ {av_number} 离线下载成功！")
@@ -262,10 +264,10 @@ def download_task(av_result, av_number, save_path, user_id):
                 # 按照AV番号重命名
                 if resource_name != av_number.upper():
                     old_name = f"{save_path}/{resource_name}"
-                    init.openapi_115.rename(old_name, av_number.upper())
+                    init.require_openapi_115().rename(old_name, av_number.upper())
                 
                 # 删除垃圾
-                init.openapi_115.auto_clean_all(f"{save_path}/{av_number.upper()}")
+                init.require_openapi_115().auto_clean_all(f"{save_path}/{av_number.upper()}")
                 
                 # 提取封面
                 cover_url, title = get_av_cover(av_number.upper())
@@ -288,7 +290,7 @@ def download_task(av_result, av_number, save_path, user_id):
                 return  # 成功后直接返回
             else:
                 # 删除失败的离线任务
-                init.openapi_115.del_offline_task(info_hash)
+                init.require_openapi_115().del_offline_task(info_hash)
         
         # 如果循环结束都没有成功，发送失败通知
         init.logger.info(f"❌ {av_number} 所有磁力链接都下载失败")
@@ -296,11 +298,11 @@ def download_task(av_result, av_number, save_path, user_id):
         
     except Exception as e:
         init.logger.warn(f"💀下载遇到错误: {str(e)}")
-        add_task_to_queue(init.bot_config.allowed_user, f"{init.IMAGE_PATH}/male023.png",
+        add_task_to_queue(init.require_bot_config().allowed_user, f"{init.IMAGE_PATH}/male023.png",
                             message=f"❌ 下载任务执行出错: {escape_markdown(str(e), version=2)}")
     finally:
         # 清空离线任务
-        init.openapi_115.del_offline_task(info_hash, del_source_file=0)
+        init.require_openapi_115().del_offline_task(info_hash, del_source_file=0)
         
 def push2aria2(save_path, user_id, cover_image, message):
     # 为Aria2推送创建任务ID系统
@@ -309,7 +311,7 @@ def push2aria2(save_path, user_id, cover_image, message):
     
     init.pending_push_tasks[push_task_id] = PendingPushTask(path=save_path)
     
-    device_name = init.bot_config.aria2.device_name or 'Aria2'
+    device_name = init.require_bot_config().aria2.device_name or 'Aria2'
     
     keyboard = [
         [InlineKeyboardButton(f"推送到{device_name}", callback_data=f"push2aria2_{push_task_id}")]
@@ -335,7 +337,7 @@ def batch_download_task(magnet_links, save_path, user_id):
     
     init.logger.info(f"发现 {len(valid_links)} 个有效链接，准备添加离线任务...")
     # 配额检查
-    # quota_info = init.openapi_115.get_quota_info()
+    # quota_info = init.require_openapi_115().get_quota_info()
     # left_offline_quota = quota_info['count'] - quota_info['used']
     # # 离线配额不足
     # if left_offline_quota < len(valid_links):
@@ -350,7 +352,7 @@ def batch_download_task(magnet_links, save_path, user_id):
     for sub_list in dl_list:
         offline_tasks = "\n".join(sub_list)
         # 调用115的离线下载API
-        offline_success = init.openapi_115.offline_download_specify_path(offline_tasks, save_path)
+        offline_success = init.require_openapi_115().offline_download_specify_path(offline_tasks, save_path)
         if offline_success: 
             success_append_count += len(sub_list)
         time.sleep(2)
@@ -361,7 +363,7 @@ def batch_download_task(magnet_links, save_path, user_id):
 
     success_count = 0
     success_list = []
-    offline_task_status = init.openapi_115.get_offline_tasks()
+    offline_task_status = init.require_openapi_115().get_offline_tasks()
     for link in valid_links:
         for task in offline_task_status:
             if task['url'] == link:
@@ -371,17 +373,17 @@ def batch_download_task(magnet_links, save_path, user_id):
                 else:
                     init.logger.warn(f"[{task['name']}] 离线下载失败或未完成!")
                     # 删除离线失败的文件
-                    init.openapi_115.del_offline_task(task['info_hash'])
+                    init.require_openapi_115().del_offline_task(task['info_hash'])
                 break
     message = f"✅ 批量离线任务完成！\n离线成功: {success_count}/{len(valid_links)}\n保存目录: {save_path}"
     
     add_task_to_queue(user_id, f"{init.IMAGE_PATH}/male022.png", message)
     
     # 删除垃圾文件
-    init.openapi_115.auto_clean_all(save_path)
+    init.require_openapi_115().auto_clean_all(save_path)
     
     # 清空离线任务
-    init.openapi_115.clear_cloud_task()
+    init.require_openapi_115().clear_cloud_task()
                     
 
 def split_list_compact(original_list, chunk_size=100):
@@ -423,12 +425,12 @@ def register_av_download_handlers(application):
     download_handler = ConversationHandler(
         entry_points=[CommandHandler("av", start_av_command),
                       MessageHandler(filters.TEXT & filters.Regex(r'^(magnet:|ed2k://|ED2K://|thunder://).+\n.+'), start_batch_download_command),
-                      MessageHandler( filters.Document.TXT, download_from_file)],
+                      MessageHandler( filters.Document.TXT, download_from_file)],  # ty:ignore[invalid-argument-type]
         states={
             SELECT_MAIN_CATEGORY: [CallbackQueryHandler(select_main_category)],
             SELECT_SUB_CATEGORY: [CallbackQueryHandler(select_sub_category)]
-        },
-        fallbacks=[CommandHandler("q", quit_conversation)],
+        },  # ty:ignore[invalid-argument-type]
+        fallbacks=[CommandHandler("q", quit_conversation)],  # ty:ignore[invalid-argument-type]
         conversation_timeout=300,
     )
     application.add_handler(download_handler)

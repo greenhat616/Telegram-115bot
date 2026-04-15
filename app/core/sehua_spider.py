@@ -37,7 +37,7 @@ def _build_full_url(path: str):
     return f"{base}/{path.lstrip('/')}"
 
 def get_base_url():
-    base_url = init.bot_config.sehua_spider.base_url
+    base_url = init.require_bot_config().sehua_spider.base_url
     if not base_url:
         base_url = "www.sehuatang.net"
     return base_url
@@ -153,23 +153,23 @@ def get_section_id(section_name):
 async def sehua_spider_start_async():
     """完整的爬虫启动函数，包含浏览器生命周期管理"""
     global browser
-    if not init.bot_config.sehua_spider.enable:
+    if not init.require_bot_config().sehua_spider.enable:
         return
     # 初始化全局浏览器
     browser = SeleniumBrowser(get_base_url())
+    assert browser is not None
 
     try:
         await browser.init_browser()
 
         if not browser.driver:
-            add_task_to_queue(init.bot_config.allowed_user, None, f"❌ 浏览器初始化失败！")
+            add_task_to_queue(init.require_bot_config().allowed_user, None, f"❌ 浏览器初始化失败！")
             return
 
-        # 尝试通过 Cloudflare 验证
         await browser.pass_cloudflare_check()
         yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
         date = yesterday.strftime("%Y-%m-%d")
-        sections = init.bot_config.sehua_spider.sections
+        sections = init.require_bot_config().sehua_spider.sections
         for section in sections:
             section_name = section.name
             init.logger.info(f"开始爬取 {section_name} 分区...")
@@ -200,18 +200,18 @@ async def sehua_spider_by_date_async(date):
     """完整的爬虫启动函数，包含浏览器生命周期管理"""
     global browser
     browser = SeleniumBrowser(get_base_url())
-    
+    assert browser is not None
+
     try:
         await browser.init_browser()
-        # 初始化全局浏览器
         if not browser.driver:
-            add_task_to_queue(init.bot_config.allowed_user, None, f"❌ 浏览器初始化失败！")
+            add_task_to_queue(init.require_bot_config().allowed_user, None, f"❌ 浏览器初始化失败！")
             init.CRAWL_SEHUA_STATUS = 0
             return
 
         # 尝试通过 Cloudflare 验证
         await browser.pass_cloudflare_check()
-        sections = init.bot_config.sehua_spider.sections
+        sections = init.require_bot_config().sehua_spider.sections
         for section in sections:
             section_name = section.name
             init.logger.info(f"开始爬取 {section_name} 分区...")
@@ -240,7 +240,7 @@ def sehua_spider_by_date(date):
     
     
 async def section_spider(section_name, date):
-    
+    assert browser is not None
     update_list = await get_section_update(section_name, date)
     
     if not update_list:
@@ -414,6 +414,7 @@ async def parse_topic(section_name, html, url, date):
 
 
 async def get_section_update(section_name, date):
+    assert browser is not None
     all_data_today = []
     section_id = get_section_id(section_name)
     if section_id == 0:
@@ -521,7 +522,7 @@ def parse_section_page(html_content, date, page_num, section_name):
             continue
               
         # 提取链接（从标题的a标签的href属性）
-        link = title_link['href'].replace('&amp;', '&') if title_link else ""
+        link = title_link['href'].replace('&amp;', '&') if title_link else ""  # ty:ignore[unresolved-attribute]
         if '-' in link:
             topic_id = link.split('-')[1]
             topic_link = f"forum.php?mod=viewthread&tid={topic_id}&extra=page%3D1"
@@ -538,6 +539,7 @@ def parse_section_page(html_content, date, page_num, section_name):
 
 
 async def age_check():
+    assert browser is not None
     try:
         # 等待页面基本加载
         # await browser.wait_for_page_loaded(timeout=30000)
@@ -592,6 +594,7 @@ async def age_check():
 
 async def safeid_check():
     """检查并处理 safeid 验证"""
+    assert browser is not None
     try:
         content = await browser.get_page_source()
         if "var safeid" in content:
@@ -798,7 +801,7 @@ def match_strategy(result):
 
 
 def get_sehua_save_path(_section_name):
-    sections = init.bot_config.sehua_spider.sections
+    sections = init.require_bot_config().sehua_spider.sections
     for section in sections:
         section_name = section.name
         if section_name == _section_name:

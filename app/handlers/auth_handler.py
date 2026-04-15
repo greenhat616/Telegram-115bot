@@ -3,6 +3,7 @@
 from telegram import Update
 from telegram.ext import CommandHandler, ConversationHandler, ContextTypes
 from app import init
+from app.utils.ptb_helpers import require_message, require_query, require_chat, require_user, require_user_data
 import os
 
 
@@ -12,27 +13,27 @@ import os
 
 async def auth_pkce_115(update: Update, context: ContextTypes.DEFAULT_TYPE):
     import asyncio
-    usr_id = update.message.from_user.id
+    usr_id = require_user(update).id
     if init.check_user(usr_id):
         if check_115_app_id():
             if os.path.exists(init.TOKEN_FILE):
                 os.remove(init.TOKEN_FILE)
-            await update.message.reply_text("⏳ 正在发起授权，请稍候...")
-            await asyncio.to_thread(init.openapi_115.auth_pkce, usr_id, init.bot_config.app_115_id)
-            if init.openapi_115.access_token and init.openapi_115.refresh_token:
-                await update.message.reply_text("✅ 授权成功！")
+            await require_message(update).reply_text("⏳ 正在发起授权，请稍候...")
+            await asyncio.to_thread(init.require_openapi_115().auth_pkce, usr_id, init.require_bot_config().app_115_id)
+            if init.require_openapi_115().access_token and init.require_openapi_115().refresh_token:
+                await require_message(update).reply_text("✅ 授权成功！")
             else:
-                await update.message.reply_text("⚠️ 授权失败，请检查配置文件中的app_id是否正确！")
+                await require_message(update).reply_text("⚠️ 授权失败，请检查配置文件中的app_id是否正确！")
         else:
-            await update.message.reply_text("⚠️ 115开放平台APPID未配置！")
+            await require_message(update).reply_text("⚠️ 115开放平台APPID未配置！")
     else:
-        await update.message.reply_text(f"⚠️ 对不起，您无权使用115机器人！")
+        await require_message(update).reply_text(f"⚠️ 对不起，您无权使用115机器人！")
     # 结束对话
     return ConversationHandler.END
 
 
 def check_115_app_id():
-    api_key = str(init.bot_config.app_115_id)
+    api_key = str(init.require_bot_config().app_115_id)
     if api_key is None or api_key.strip() == "" or api_key.strip().lower() == "your_115_app_id":
         init.logger.error("115 Open APPID未配置!")
         return False
@@ -44,15 +45,15 @@ async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
         await update.callback_query.edit_message_text(text="🚪用户退出本次会话")
     else:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="🚪用户退出本次会话")
+        await context.bot.send_message(chat_id=require_chat(update).id, text="🚪用户退出本次会话")
     return ConversationHandler.END
 
 
 def register_auth_handlers(application):
     auth_handler = ConversationHandler(
-        entry_points=[CommandHandler("auth", auth_pkce_115)],
+        entry_points=[CommandHandler("auth", auth_pkce_115)],  # ty:ignore[invalid-argument-type]
         states={},  # 添加空的states字典
-        fallbacks=[CommandHandler("q", quit_conversation)],
+        fallbacks=[CommandHandler("q", quit_conversation)],  # ty:ignore[invalid-argument-type]
         conversation_timeout=600,
     )
     application.add_handler(auth_handler)

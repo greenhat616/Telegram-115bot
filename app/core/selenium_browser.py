@@ -59,7 +59,7 @@ class SeleniumBrowser:
                 if self.base_url:
                     if not self.base_url.startswith('http'):
                         self.base_url = f"https://{self.base_url}"
-                    self.driver.set_page_load_timeout(init.bot_config.selenium_timeout)
+                    self.driver.set_page_load_timeout(init.require_bot_config().selenium_timeout)
                     self.driver.get(self.base_url)
                     
                 init.logger.info("远程 Selenium 连接成功")
@@ -103,7 +103,7 @@ class SeleniumBrowser:
                 
                 # 额外的反检测脚本 (仅在 driver 成功初始化后执行)
                 try:
-                    self.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+                    self.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {  # ty:ignore[unresolved-attribute]
                         "source": """
                             Object.defineProperty(navigator, 'webdriver', {
                                 get: () => undefined
@@ -113,12 +113,12 @@ class SeleniumBrowser:
                 except:
                     pass
 
-                self.driver.set_page_load_timeout(init.bot_config.selenium_timeout)
+                self.driver.set_page_load_timeout(init.require_bot_config().selenium_timeout)  # ty:ignore[unresolved-attribute]
 
                 if self.base_url:
                     if not self.base_url.startswith('http'):
                         self.base_url = f"https://{self.base_url}"
-                    self.driver.get(self.base_url)
+                    self.driver.get(self.base_url)  # ty:ignore[unresolved-attribute]
                 
                 init.logger.info(f"SeleniumBase 浏览器初始化成功 (模式: {mode_name})")
                 return # 初始化成功，直接返回

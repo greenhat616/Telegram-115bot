@@ -5,6 +5,7 @@ import asyncio
 import time
 import os
 from app import init
+from app.utils.ptb_helpers import require_message, require_query, require_chat, require_user, require_user_data
 from concurrent.futures import ThreadPoolExecutor
 from app.utils.aria2 import download_by_url, check_status_by_url
 from app.utils.message_queue import add_task_to_queue
@@ -14,7 +15,7 @@ aria2_download_check_executor = ThreadPoolExecutor(max_workers=10, thread_name_p
 
 def _do_aria2_push(save_path, download_path_base, device_name, chat_id):
     """在工作线程中执行 Aria2 推送（同步阻塞操作）"""
-    download_urls = init.openapi_115.get_file_download_url(save_path)
+    download_urls = init.require_openapi_115().get_file_download_url(save_path)
     init.logger.info(f"[{save_path}]目录发现{len(download_urls)}个文件需要下载")
 
     path = Path(save_path)
@@ -33,8 +34,9 @@ def _do_aria2_push(save_path, download_path_base, device_name, chat_id):
     return all_pushed, last_part
 
 async def push2aria2(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
+    query = require_query(update)
     await query.answer()
+    assert query.data is not None
 
     data = query.data
     if data.startswith("push2aria2_"):
@@ -57,11 +59,11 @@ async def push2aria2(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 init.logger.warn("❌ 无效的文件路径，无法推送到Aria2。")
                 await query.answer("❌ 无效的文件路径，无法推送到Aria2。", show_alert=True)
                 return
-            device_name = init.bot_config.aria2.device_name or 'Aria2'
-            download_path_base = init.bot_config.aria2.download_path
+            device_name = init.require_bot_config().aria2.device_name or 'Aria2'
+            download_path_base = init.require_bot_config().aria2.download_path
             # 移至线程池避免阻塞主事件循环
             all_pushed, last_part = await asyncio.to_thread(
-                _do_aria2_push, save_path, download_path_base, device_name, update.effective_chat.id
+                _do_aria2_push, save_path, download_path_base, device_name, require_chat(update).id
             )
             
             

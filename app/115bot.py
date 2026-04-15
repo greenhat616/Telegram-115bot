@@ -83,12 +83,15 @@ def get_help_info():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_info = get_help_info()
+    assert update.effective_chat is not None
     await context.bot.send_message(chat_id=update.effective_chat.id, text=help_info, parse_mode="html", disable_web_page_preview=True)
     
 async def reload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     init.load_yaml_config()
+    config = init.require_bot_config()
     init.logger.info("Reload configuration success:")
-    init.logger.info(init.bot_config.model_dump_json())
+    init.logger.info(config.model_dump_json())
+    assert update.effective_chat is not None
     await context.bot.send_message(chat_id=update.effective_chat.id, text="🔁重载配置完成！", parse_mode="html")
 
 def start_async_loop():
@@ -97,7 +100,7 @@ def start_async_loop():
     asyncio.set_event_loop(loop)
     init.logger.info("事件循环已启动")
     try:
-        token = init.bot_config.bot_token
+        token = init.require_bot_config().bot_token
         loop.create_task(queue_worker(loop, token))
         loop.run_forever()
     except Exception as e:
@@ -126,9 +129,10 @@ def send_start_message():
 
 发送 `/start` 查看操作说明"""
         
+        config = init.require_bot_config()
         add_task_to_queue(
-            init.bot_config.allowed_user, 
-            f"{init.IMAGE_PATH}/neuter010.png", 
+            config.allowed_user,
+            f"{init.IMAGE_PATH}/neuter010.png",
             message=formatted_message
         )
 
@@ -171,7 +175,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     init.logger.error(f"Unhandled exception in handler: {context.error}\n{error_details}")
     # 尝试通知用户
     try:
-        if update and hasattr(update, 'effective_chat') and update.effective_chat:
+        if isinstance(update, Update) and update.effective_chat:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text=f"⚠️ 处理请求时发生内部错误，请稍后重试。"
@@ -202,11 +206,12 @@ def main():
         if wait_count >= max_wait:
             init.logger.error("消息队列线程未准备就绪，程序将退出。")
             exit(1)
+    config = init.require_bot_config()
     init.logger.info("Starting bot with configuration:")
-    init.logger.info(init.bot_config.model_dump_json())
+    init.logger.info(config.model_dump_json())
     # 调整telegram日志级别
     update_logger_level()
-    token = init.bot_config.bot_token
+    token = config.bot_token
     application = Application.builder().token(token).post_init(post_init).build()
     # 注册全局异常处理器
     application.add_error_handler(error_handler)
@@ -222,7 +227,7 @@ def main():
     if not init.initialize_115open():
         init.logger.error("115 OpenAPI客户端初始化失败，程序无法继续运行！")
         add_task_to_queue(
-            init.bot_config.allowed_user,
+            config.allowed_user,
             f"{init.IMAGE_PATH}/male023.png",
             message="❌ 115 OpenAPI客户端初始化失败，程序无法继续运行！\n请检查Token或115 AppID设置是否正确！"
         )
