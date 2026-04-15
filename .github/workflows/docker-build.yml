@@ -28,8 +28,8 @@ on:
         type: boolean
 
 env:
-  DOCKERHUB_IMAGE: qiqiandfei/115-bot  # Docker Hub 镜像名
-  GHCR_IMAGE: ghcr.io/${{ github.repository }}  # GitHub Packages 镜像名
+  DOCKERHUB_IMAGE: qiqiandfei/115-bot  # Docker Hub 镜像名 (disabled for fork)
+  GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/telegram-115bot  # GitHub Packages 镜像名 (lowercase required)
 
 jobs:
   build:
