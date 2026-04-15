@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import asyncio
+import os
 from app import init
 from telegram import Bot, InlineKeyboardMarkup
 from telegram.helpers import escape_markdown
@@ -108,18 +109,26 @@ async def queue_worker(loop: asyncio.AbstractEventLoop, token: str) -> None:
 
             # 根据是否有图片和键盘选择发送方式
             if post_url:
-                # 发送图片消息（增加超时时间）
-                await bot.send_photo(
-                    chat_id=sub_user,
-                    photo=post_url,
-                    caption=message,
-                    parse_mode="MarkdownV2",
-                    reply_markup=keyboard,
-                    read_timeout=30,  # 读取超时30秒
-                    write_timeout=30,  # 写入超时30秒
-                    connect_timeout=10,  # 连接超时10秒
-                    pool_timeout=10,  # 连接池超时10秒
-                )
+                # 本地文件路径需要以文件对象方式传入
+                photo_input = post_url
+                if not post_url.startswith(("http://", "https://")) and os.path.isfile(post_url):
+                    photo_input = open(post_url, "rb")
+                try:
+                    # 发送图片消息（增加超时时间）
+                    await bot.send_photo(
+                        chat_id=sub_user,
+                        photo=photo_input,
+                        caption=message,
+                        parse_mode="MarkdownV2",
+                        reply_markup=keyboard,
+                        read_timeout=30,  # 读取超时30秒
+                        write_timeout=30,  # 写入超时30秒
+                        connect_timeout=10,  # 连接超时10秒
+                        pool_timeout=10,  # 连接池超时10秒
+                    )
+                finally:
+                    if photo_input is not post_url:
+                        photo_input.close()
             else:
                 # 发送纯文本消息（增加超时时间）
                 await bot.send_message(
