@@ -6,18 +6,19 @@ import yaml
 import os
 from urllib.parse import urlparse, parse_qs
 
+
 def read_yaml_file(yaml_path: str) -> dict | None:
     # 获取yaml文件名称
     try:
         # 获取yaml文件路径
         if os.path.exists(yaml_path):
-            with open(yaml_path, 'r', encoding='utf-8') as f:
+            with open(yaml_path, "r", encoding="utf-8") as f:
                 cfg = f.read()
                 f.close()
             yaml_conf = yaml.load(cfg, Loader=yaml.FullLoader)
             return yaml_conf
         else:
-           return None
+            return None
     except Exception as e:
         init.logger.warn(f"配置文件[{yaml_path}]格式有误，请检查!")
         return None
@@ -26,12 +27,13 @@ def read_yaml_file(yaml_path: str) -> dict | None:
 def random_waite(min: int = 2, max: int = 15) -> None:
     import random
     import time
+
     wait_time = random.randint(min, max)
     init.logger.info(f"随机等待 {wait_time} 秒以模拟人类行为...")
     ms = float(random.randint(1, 999)) / 1000.0
     time.sleep(wait_time + ms)
-    
-    
+
+
 def date_convert2BJT(date_str: str) -> str:
     if not date_str:
         return date.today().strftime("%Y-%m-%d")
@@ -60,7 +62,7 @@ def get_magnet_hash(magnet: str) -> str | None:
 
 def check_magnet(magnet: str) -> bool:
     pattern = r"^magnet:\?xt=urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})(?:&.*)?$"
-    if not isinstance(magnet, str) or not magnet.startswith('magnet:'):
+    if not isinstance(magnet, str) or not magnet.startswith("magnet:"):
         return False
     return re.fullmatch(pattern, magnet) is not None
 
@@ -80,26 +82,26 @@ def check_input(input_str: str) -> int:
     """
     if not input_str:
         return 0
-        
+
     # 纯英文
-    if re.fullmatch(r'[a-zA-Z]+', input_str):
+    if re.fullmatch(r"[a-zA-Z]+", input_str):
         return 1
     # 纯数字
-    elif re.fullmatch(r'[0-9]+', input_str):
+    elif re.fullmatch(r"[0-9]+", input_str):
         return 2
     # 纯中文 (汉字)
-    elif re.fullmatch(r'[\u4e00-\u9fa5]+', input_str):
+    elif re.fullmatch(r"[\u4e00-\u9fa5]+", input_str):
         return 3
     # 纯日文 (平假名/片假名)
-    elif re.fullmatch(r'[\u3040-\u309F\u30A0-\u30FF]+', input_str):
+    elif re.fullmatch(r"[\u3040-\u309F\u30A0-\u30FF]+", input_str):
         return 4
     # 中文 + 日文
-    elif re.fullmatch(r'[\u4e00-\u9fa5\u3040-\u309F\u30A0-\u30FF]+', input_str):
+    elif re.fullmatch(r"[\u4e00-\u9fa5\u3040-\u309F\u30A0-\u30FF]+", input_str):
         return 5
     # 英文 + 数字
-    elif re.fullmatch(r'[a-zA-Z0-9]+', input_str):
+    elif re.fullmatch(r"[a-zA-Z0-9]+", input_str):
         return 6
-    
+
     return 0
 
 
@@ -111,11 +113,11 @@ def clean_magnet(magnet_link: str) -> str:
         return ""
     try:
         parsed = urlparse(magnet_link)
-        if parsed.scheme != 'magnet':
+        if parsed.scheme != "magnet":
             return magnet_link
-        
+
         params = parse_qs(parsed.query)
-        xt = params.get('xt', [])
+        xt = params.get("xt", [])
         if xt:
             return f"magnet:?xt={xt[0]}"
     except:

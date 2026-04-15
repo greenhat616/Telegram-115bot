@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup
 import sys
 import os
+
 current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
@@ -28,13 +29,14 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 from typing import Any
 
+
 def _extract_magnet_sync(driver: WebDriver | None, url: str) -> str:
     """
     同步执行的磁力链接提取逻辑 (运行在 executor 中)
     """
     if not driver:
         return ""
-    
+
     init.logger.info(f"正在提取磁力链接: {url}")
     try:
         # rmdown 特殊处理
@@ -42,24 +44,25 @@ def _extract_magnet_sync(driver: WebDriver | None, url: str) -> str:
             # 策略1: 优先尝试从 URL 参数中提取 hash (最快且最稳定)
             try:
                 from urllib.parse import urlparse, parse_qs
+
                 # 检查传入的 url
                 target_urls = [url]
                 # 也检查当前浏览器地址，防止有跳转
                 if driver.current_url != url:
                     target_urls.append(driver.current_url)
-                
+
                 for target_url in target_urls:
                     parsed_url = urlparse(target_url)
                     query_params = parse_qs(parsed_url.query)
-                    hash_values = query_params.get('hash', [])
+                    hash_values = query_params.get("hash", [])
                     if hash_values:
                         magnet_hash = hash_values[0]
-                        
+
                         # rmdown 的 hash 可能是 43 位（带3位前缀）或 40 位（纯hash）
                         # 例如: 25367311d70a48563c900138f83cf3f3c3b08f12147 -> 67311d70a48563c900138f83cf3f3c3b08f12147
                         if len(magnet_hash) == 43:
                             magnet_hash = magnet_hash[3:]
-                            
+
                         # 简单的长度校验，SHA1通常是40位
                         if len(magnet_hash) == 40:
                             magnet = f"magnet:?xt=urn:btih:{magnet_hash.upper()}"
@@ -72,10 +75,16 @@ def _extract_magnet_sync(driver: WebDriver | None, url: str) -> str:
             try:
                 # 尝试授予剪贴板权限
                 try:
-                    driver.execute_cdp_cmd("Browser.grantPermissions", {
-                        "origin": url,
-                        "permissions": ["clipboardReadWrite", "clipboardSanitizedWrite"]
-                    })
+                    driver.execute_cdp_cmd(
+                        "Browser.grantPermissions",
+                        {
+                            "origin": url,
+                            "permissions": [
+                                "clipboardReadWrite",
+                                "clipboardSanitizedWrite",
+                            ],
+                        },
+                    )
                 except:
                     pass
 
@@ -84,7 +93,7 @@ def _extract_magnet_sync(driver: WebDriver | None, url: str) -> str:
                 if cbtn:
                     cbtn[0].click()
                     time.sleep(1)
-                    
+
                     # 尝试从剪贴板读取
                     magnet_raw = driver.execute_async_script("""
                         var callback = arguments[arguments.length - 1];
@@ -98,13 +107,14 @@ def _extract_magnet_sync(driver: WebDriver | None, url: str) -> str:
                         # 如果不是以magnet:开头，尝试拼接
                         if not magnet.startswith("magnet:"):
                             magnet = f"magnet:?{magnet}"
-                        
+
                         # 清理tracker，只保留xt
                         try:
                             from urllib.parse import urlparse, parse_qs
+
                             parsed = urlparse(str(magnet))
                             params = parse_qs(parsed.query)
-                            xt = params.get('xt', [])
+                            xt = params.get("xt", [])
                             if xt:
                                 magnet = f"magnet:?xt={xt[0]}"
                         except:
@@ -115,19 +125,21 @@ def _extract_magnet_sync(driver: WebDriver | None, url: str) -> str:
                             return magnet
             except Exception as e:
                 init.logger.warn(f"rmdown 处理失败: {e}")
-            
+
             # rmdown 只有剪贴板这一种获取方式，如果失败直接返回空
             return ""
 
         # 通用磁力链接提取
         page_source = driver.page_source
-        magnet_pattern = re.compile(r"magnet:\?xt=urn:btih:[a-zA-Z0-9]{32,40}", re.IGNORECASE)
-        
+        magnet_pattern = re.compile(
+            r"magnet:\?xt=urn:btih:[a-zA-Z0-9]{32,40}", re.IGNORECASE
+        )
+
         # 1. 检查页面源码中的文本
         match = magnet_pattern.search(page_source)
         if match:
             return match.group(0)
-        
+
         # 2. 检查所有链接的 href
         links = driver.find_elements(By.TAG_NAME, "a")
         for link in links:
@@ -140,8 +152,9 @@ def _extract_magnet_sync(driver: WebDriver | None, url: str) -> str:
 
     except Exception as e:
         init.logger.error(f"提取磁力链接失败: {e}")
-        
+
     return ""
+
 
 async def fetch_t66y_magnet(browser: SeleniumBrowser, url: str) -> str:
     """
@@ -149,29 +162,29 @@ async def fetch_t66y_magnet(browser: SeleniumBrowser, url: str) -> str:
     """
     # 1. 访问页面
     await browser.goto(url)
-    
+
     # 2. 过盾检查
     await browser.pass_cloudflare_check()
-    
+
     # 3. 提取磁力 (在 executor 中运行同步逻辑)
     return await browser.run_with_driver(_extract_magnet_sync, url)
 
 
 def parse_t66y_html(html_content: str) -> dict[str, str]:
     soup = BeautifulSoup(html_content, "html.parser")
-    
+
     # 1. Extract Poster
     poster_url = ""
-    
+
     # 策略：通过关键词定位正文，获取关键词后的第一张图片，以跳过顶部广告
     keywords = ["影片", "文件", "名稱", "名称", "标题", "標題", "作品"]
     start_node = None
-    
+
     for keyword in keywords:
         start_node = soup.find(string=re.compile(keyword))
         if start_node:
             break
-            
+
     if start_node:
         img_tag = start_node.find_next("img")
         if img_tag:
@@ -182,11 +195,13 @@ def parse_t66y_html(html_content: str) -> dict[str, str]:
         img_tag = soup.find("img")
         if img_tag:
             poster_url = img_tag.get("src", "")
-        
+
     # 2. Extract Magnet
     magnet = ""
-    magnet_pattern = re.compile(r"magnet:\?xt=urn:btih:[a-zA-Z0-9]{32,40}", re.IGNORECASE)
-    
+    magnet_pattern = re.compile(
+        r"magnet:\?xt=urn:btih:[a-zA-Z0-9]{32,40}", re.IGNORECASE
+    )
+
     if magnet_pattern.search(html_content):
         magnet = magnet_pattern.search(html_content).group(0)  # ty:ignore[unresolved-attribute]
 
@@ -195,16 +210,15 @@ def parse_t66y_html(html_content: str) -> dict[str, str]:
         all_links = soup.find_all("a", href=True)
         if all_links:
             last_link = all_links[-1]["href"]
-            
 
     # 3. Extract Movie Info
     # Create a copy of soup to manipulate for text extraction
     info_soup = BeautifulSoup(html_content, "html.parser")
-    
+
     # Remove images
     for img in info_soup.find_all("img"):
         img.decompose()
-        
+
     # Replace br with newline
     for br in info_soup.find_all("br"):
         br.replace_with("\n")
@@ -212,11 +226,8 @@ def parse_t66y_html(html_content: str) -> dict[str, str]:
     return {
         "poster_url": str(poster_url),
         "magnet": magnet,
-        "fetch_url": str(last_link) if not magnet and 'last_link' in locals() else ""
+        "fetch_url": str(last_link) if not magnet and "last_link" in locals() else "",
     }
-
-
-
 
 
 def get_section_id(section_name: str) -> int:
@@ -227,13 +238,13 @@ def get_section_id(section_name: str) -> int:
         "动漫原创": 5,
         "国产原创": 25,
         "中字原创": 26,
-        "AI破解原创": 28
+        "AI破解原创": 28,
     }
     return section_map.get(section_name, 0)
 
 
 async def start_t66y_rss_async(section_name: str | None) -> None:
-    
+
     config = init.require_bot_config()
     browser = None
     try:
@@ -243,9 +254,11 @@ async def start_t66y_rss_async(section_name: str | None) -> None:
         await browser.init_browser()
 
         if not browser.driver:
-             init.logger.error("浏览器初始化失败，无法继续任务！")
-             add_task_to_queue(config.allowed_user, None, f"❌ 浏览器初始化失败，无法继续任务！")
-             return
+            init.logger.error("浏览器初始化失败，无法继续任务！")
+            add_task_to_queue(
+                config.allowed_user, None, f"❌ 浏览器初始化失败，无法继续任务！"
+            )
+            return
 
         t66y = config.rsshub.t66y
 
@@ -254,16 +267,22 @@ async def start_t66y_rss_async(section_name: str | None) -> None:
                 continue
             section_id = get_section_id(section.name)
             if section_id == 0:
-                init.logger.warning(f"未知的t66y版块名称: {section.name}，跳过该版块的RSS订阅")
+                init.logger.warning(
+                    f"未知的t66y版块名称: {section.name}，跳过该版块的RSS订阅"
+                )
                 continue
             rss_url = f"{rss_host.rstrip('/')}/t66y/{section_id}/today?format=json"
             response = http_request("GET", rss_url, timeout=config.rsshub.t66y.timeout)
             if response.status_code != 200:
-                init.logger.error(f"无法获取t66y RSS订阅，HTTP状态码: {response.status_code}")
+                init.logger.error(
+                    f"无法获取t66y RSS订阅，HTTP状态码: {response.status_code}"
+                )
                 continue
             pares_results = []
             rss_data = response.json()
-            pares_results.extend(await pares_t66y_rss(rss_data, section.name, section.save_path, browser))
+            pares_results.extend(
+                await pares_t66y_rss(rss_data, section.name, section.save_path, browser)
+            )
             # Insert into database
             save2DB_t66y(pares_results)
     except Exception as e:
@@ -275,19 +294,25 @@ async def start_t66y_rss_async(section_name: str | None) -> None:
     # 离线到115
     t66y_offline()
 
-    
 
-async def pares_t66y_rss(rss_data: dict[str, Any], section_name: str, save_path: str, browser: SeleniumBrowser) -> list[dict[str, str]]:
+async def pares_t66y_rss(
+    rss_data: dict[str, Any],
+    section_name: str,
+    save_path: str,
+    browser: SeleniumBrowser,
+) -> list[dict[str, str]]:
     items = rss_data.get("items", [])
     pares_results = []
     for item in items:
         try:
             content_html = item.get("content_html", "")
             # 多部影片一起发的直接跳过
-            if content_html.count("【影片名称】") > 1 \
-                or content_html.count("【影片名稱】") > 1 \
-                or content_html.count("【影片标题】") > 1 \
-                or content_html.count("【影片標題】") > 1:
+            if (
+                content_html.count("【影片名称】") > 1
+                or content_html.count("【影片名稱】") > 1
+                or content_html.count("【影片标题】") > 1
+                or content_html.count("【影片標題】") > 1
+            ):
                 continue
             parsed_data = parse_t66y_html(content_html)
             title = item.get("title", "")
@@ -297,18 +322,18 @@ async def pares_t66y_rss(rss_data: dict[str, Any], section_name: str, save_path:
             poster_url = parsed_data.get("poster_url", "")
             magnet = parsed_data.get("magnet", "")
             fetch_url = parsed_data.get("fetch_url", "")
-            
+
             # 点击连接获取磁力
             if not magnet and fetch_url:
                 magnet = await fetch_t66y_magnet(browser, fetch_url)
-                
+
             if not magnet:
                 # invalid_resource = json.dumps(result)
                 init.logger.warn(f"跳过无效的t66y资源...")
                 continue
-            
+
             magnet = clean_magnet(magnet)
-            
+
             safe_section = escape_markdown(section_name, version=2)
             safe_title = escape_markdown(title, version=2)
             safe_date = escape_markdown(str(date_published), version=2)
@@ -324,26 +349,29 @@ async def pares_t66y_rss(rss_data: dict[str, Any], section_name: str, save_path:
 **下载链接：**    `{safe_magnet}`
 **发布链接：**    [点击查看详情]({safe_pub_url})
                            """
-            
+
             result = {
-                        "section_name": section_name,
-                        "save_path": save_path,
-                        "title": title,
-                        "movie_info": movie_info,
-                        "poster_url": poster_url,
-                        "magnet": magnet,
-                        "publish_date": date_published,
-                        "pub_url": pub_url
-                    }
-            
+                "section_name": section_name,
+                "save_path": save_path,
+                "title": title,
+                "movie_info": movie_info,
+                "poster_url": poster_url,
+                "magnet": magnet,
+                "publish_date": date_published,
+                "pub_url": pub_url,
+            }
+
             is_match, specify_save_path = match_strategy(result)
             if is_match:
-                result['save_path'] = specify_save_path
+                result["save_path"] = specify_save_path
                 init.logger.info(f"成功解析t66y资源: {json.dumps(result)}")
                 pares_results.append(result)
         except Exception as e:
-            init.logger.error(f"解析t66y资源失败: {e}, title: {item.get('title', 'unknown')}")
+            init.logger.error(
+                f"解析t66y资源失败: {e}, title: {item.get('title', 'unknown')}"
+            )
     return pares_results
+
 
 def save2DB_t66y(results: list[dict[str, str]]) -> None:
     if not results:
@@ -361,34 +389,50 @@ def save2DB_t66y(results: list[dict[str, str]]) -> None:
                 magnet = result.get("magnet", "")
                 section_name = result.get("section_name", "")
                 save_path = result.get("save_path", "")
-                
+
                 # Check if exists
                 magnet_hash = get_magnet_hash(magnet)
                 if magnet_hash:
                     # 如果能提取到hash，使用模糊匹配查询
                     sql_check = "select count(*) from t66y where magnet LIKE ?"
-                    params_check = (f'%{magnet_hash}%', )
+                    params_check = (f"%{magnet_hash}%",)
                 else:
                     # 提取不到hash，回退到完全匹配
                     sql_check = "select count(*) from t66y where magnet = ?"
-                    params_check = (magnet, )
+                    params_check = (magnet,)
 
                 count = sqlite.query_one(sql_check, params_check)
                 if count > 0:
-                    init.logger.info(f"[{title}]检测到相同磁力链接(Hash: {magnet_hash})已存在，跳过入库！")
+                    init.logger.info(
+                        f"[{title}]检测到相同磁力链接(Hash: {magnet_hash})已存在，跳过入库！"
+                    )
                     continue  # 已存在，跳过
-                
+
                 insert_sql = """
                     INSERT INTO t66y (section_name, title, movie_info, poster_url, magnet, publish_date, pub_url, save_path)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """
-                sqlite.execute_sql(insert_sql, (section_name, title, movie_info, poster_url, magnet, publish_date, pub_url, save_path))
+                sqlite.execute_sql(
+                    insert_sql,
+                    (
+                        section_name,
+                        title,
+                        movie_info,
+                        poster_url,
+                        magnet,
+                        publish_date,
+                        pub_url,
+                        save_path,
+                    ),
+                )
                 insert_count += 1
             init.logger.info(f"[{section_name}]板块新增入库 {insert_count} 条！")
         except Exception as e:
-            init.logger.error(f"保存t66y资源到数据库失败: {e}, title: {result.get('title', 'unknown')}")
-        
-    
+            init.logger.error(
+                f"保存t66y资源到数据库失败: {e}, title: {result.get('title', 'unknown')}"
+            )
+
+
 def match_strategy(result: dict[str, str]) -> tuple[bool, str | None]:
     yaml_path = init.STRATEGY_FILE
     strategy_config = None
@@ -396,56 +440,62 @@ def match_strategy(result: dict[str, str]) -> tuple[bool, str | None]:
     try:
         # 获取yaml文件路径
         if os.path.exists(yaml_path):
-            with open(yaml_path, 'r', encoding='utf-8') as f:
+            with open(yaml_path, "r", encoding="utf-8") as f:
                 cfg = f.read()
                 f.close()
             strategy_config = yaml.load(cfg, Loader=yaml.FullLoader)
         else:
-            return True, result.get('save_path')
+            return True, result.get("save_path")
     except Exception as e:
         init.logger.warn(f"配置文件[{yaml_path}]格式有误，请检查!")
-        return True, result.get('save_path')
+        return True, result.get("save_path")
 
     if strategy_config:
-        title_regular = strategy_config.get('title_regular', [])
+        title_regular = strategy_config.get("title_regular", [])
         if not title_regular:
-            return True, result.get('save_path')
-        
-        current_section = result.get('section_name', '')
+            return True, result.get("save_path")
+
+        current_section = result.get("section_name", "")
         section_has_rules = False
-        
+
         # 检查当前section是否有配置规则
         for item in title_regular:
-            if item.get('section_name', '') == current_section:
+            if item.get("section_name", "") == current_section:
                 section_has_rules = True
                 break
-        
+
         # 如果当前section没有配置规则，默认全部通过
         if not section_has_rules:
-            return True, result.get('save_path')
-        
+            return True, result.get("save_path")
+
         # 有配置规则的section，需要匹配正则
         for item in title_regular:
-            if item.get('section_name', '') == current_section:
-                pattern = item.get('pattern', '')
+            if item.get("section_name", "") == current_section:
+                pattern = item.get("pattern", "")
                 if not pattern:
                     continue
-                if re.search(pattern, result.get('title', ''), re.IGNORECASE):
-                    strategy_name = item.get('strategy_name', item.get('name', '未知策略'))
-                    init.logger.info(f"标题[{result.get('title', '')}]匹配正则[{strategy_name}]成功!")
+                if re.search(pattern, result.get("title", ""), re.IGNORECASE):
+                    strategy_name = item.get(
+                        "strategy_name", item.get("name", "未知策略")
+                    )
+                    init.logger.info(
+                        f"标题[{result.get('title', '')}]匹配正则[{strategy_name}]成功!"
+                    )
                     # 正确处理空值：如果specify_save_path为空值，使用默认路径
-                    specify_path = item.get('specify_save_path') or result.get('save_path')
+                    specify_path = item.get("specify_save_path") or result.get(
+                        "save_path"
+                    )
                     return True, specify_path
-        
+
         # 有配置规则但都不匹配，放弃入库
-        init.logger.info(f"标题[{result.get('title', '')}]未匹配到[{current_section}]板块的任何规则，自动放弃入库!")
+        init.logger.info(
+            f"标题[{result.get('title', '')}]未匹配到[{current_section}]板块的任何规则，自动放弃入库!"
+        )
         return False, ""
-        
+
     # 空的配置等同于无效策略，默认全部通过
-    return True, result.get('save_path')
+    return True, result.get("save_path")
 
-
-        
 
 if __name__ == "__main__":
     init.init_log()

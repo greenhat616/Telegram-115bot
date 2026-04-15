@@ -24,19 +24,19 @@
 #     try:
 #         # 发起 GET 请求
 #         response = requests.get(search_url, headers=headers)
-        
+
 #         if response.status_code != 200:
 #             init.logger.error(f"请求[actor_id]失败，响应状态码: {response.status_code}")
 #             return None
-            
+
 #         response.raise_for_status()
 
 #         # 使用 BeautifulSoup 解析 HTML
 #         soup = BeautifulSoup(response.text, "html.parser")
 
 #         # 搜索所有演员链接，链接中包含 "/actor/"
-#         actor_link = soup.find("a", 
-#                                href=lambda href: href and "/actors/" in href, 
+#         actor_link = soup.find("a",
+#                                href=lambda href: href and "/actors/" in href,
 #                                title=lambda title: title and actor_name in title)
 
 #         # 如果找到链接，提取第一个演员 ID
@@ -57,7 +57,7 @@
 #         sql = f"delete from subscribe"
 #         sqlite.execute_sql(sql)
 #         init.logger.info("All subscribe has been deleted.")
-        
+
 # def del_sub_by_actor(actor_id, actor_name):
 #     with SqlLiteLib() as sqlite:
 #         sql = f"delete from subscribe where actor_id = ?"
@@ -190,12 +190,12 @@
 #     if response.status_code != 200:
 #         init.logger.warn(f"Failed to fetch data for number")
 #         return ""
-    
+
 #     magnet_link_list = []
 
 #     soup = BeautifulSoup(response.text, features="html.parser")
 #     magnet_div = soup.find('div', class_='magnet-links')
-    
+
 #     item_columns_odd = magnet_div.findAll('div', class_='item columns is-desktop odd')
 #     for item_column_odd in item_columns_odd:
 #         score = 0.0
@@ -275,7 +275,7 @@
 #                 if not magnet_link_list:  # 检查是否返回有效磁力链接列表
 #                     init.logger.info(f"[{number}]的磁力链接尚未发布")
 #                     continue
-                
+
 #                 # 依次下载，直到成功后退出
 #                 for item in magnet_link_list:
 #                     magnet_link = item['magnet_link']
@@ -319,9 +319,9 @@
 #         message = f"""
 #                 **{msg_title}**
 
-#                 **演员:** {msg_actor_name}  
-#                 **评分:** {msg_score}  
-#                 **下载链接:** `{magnet}`  
+#                 **演员:** {msg_actor_name}
+#                 **评分:** {msg_score}
+#                 **下载链接:** `{magnet}`
 #                 **发布链接:** [点击查看详情]({pub_url})
 #                 """
 #         add_task_to_queue(sub_user, post_url, message)
@@ -329,11 +329,10 @@
 
 #     except Exception as e:
 #         init.logger.error(f"编号 [{number}] 添加到队列失败: {e}")
-    
 
 
 # def download2spec_path(magnet_link, number, actor_name):
-#     try: 
+#     try:
 #         save_path = f"{init.bot_config['subscribe']['path']}/{actor_name}"
 #         # 创建目录
 #         init.openapi_115.create_dir_for_file(f"{init.bot_config['subscribe']['path']}", actor_name)
@@ -359,7 +358,7 @@
 #                     init.openapi_115.move_file(f"{init.bot_config['offline_path']}/{resource_name}", f"{init.bot_config['offline_path']}/{number}")
 #                     # 移动番号文件夹到指定目录
 #                     init.openapi_115.move_file(f"{init.bot_config['offline_path']}/{number}", save_path)
-                
+
 #                 # 读取目录下所有文件
 #                 file_list = init.openapi_115.get_files_from_dir(f"{save_path}/{number}")
 #                 # 创建软链
@@ -405,9 +404,9 @@
 #     # message = f"""
 #     #         **{msg_title}**
 
-#     #         **演员:** {msg_actor_name}  
-#     #         **评分:** {score}  
-#     #         **下载链接:** `{magnet}`  
+#     #         **演员:** {msg_actor_name}
+#     #         **评分:** {score}
+#     #         **下载链接:** `{magnet}`
 #     #         **发布链接:** [点击查看详情]({pub_url})
 #     #             """
 #     # print(message)

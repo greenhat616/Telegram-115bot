@@ -5,6 +5,7 @@ import hashlib
 import re
 import sys
 import threading
+
 current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
@@ -35,17 +36,25 @@ RISK_THRESHOLD = 0.95
 
 
 def _retryable_httpx_exception(exc: BaseException) -> bool:
-    return isinstance(exc, (
-        httpx.ConnectError,
-        httpx.TimeoutException,
-        httpx.RemoteProtocolError,
-        httpx.PoolTimeout,
-    ))
+    return isinstance(
+        exc,
+        (
+            httpx.ConnectError,
+            httpx.TimeoutException,
+            httpx.RemoteProtocolError,
+            httpx.PoolTimeout,
+        ),
+    )
 
 
 def _retryable_5xx_result(result: Any) -> bool:
     """仅匹配 HTTP 5xx 状态码，不匹配 115 业务错误码（如 40140125）"""
-    return isinstance(result, dict) and result.get("_http_status", 0) in (500, 502, 503, 504)
+    return isinstance(result, dict) and result.get("_http_status", 0) in (
+        500,
+        502,
+        503,
+        504,
+    )
 
 
 def _return_last_outcome(retry_state: RetryCallState) -> Any:
@@ -56,20 +65,22 @@ def _return_last_outcome(retry_state: RetryCallState) -> Any:
         raise outcome.exception()  # ty:ignore[invalid-raise]
     return outcome.result()
 
+
 def handle_token_expiry(func: Callable[..., Any]) -> Callable[..., Any]:
     """装饰器：仅处理 token 过期（40140125），网络异常由 _make_api_request 的 tenacity 处理"""
+
     @wraps(func)
     def wrapper(self: "OpenAPI_115", *args: Any, **kwargs: Any) -> Any:
         response = func(self, *args, **kwargs)
-        if isinstance(response, dict) and response.get('code') == 40140125:
+        if isinstance(response, dict) and response.get("code") == 40140125:
             init.logger.info("Token需要刷新，正在刷新后重试...")
             self.refresh_access_token()
             time.sleep(0.5)
             response = func(self, *args, **kwargs)
-            if isinstance(response, dict) and response.get('code') == 40140125:
+            if isinstance(response, dict) and response.get("code") == 40140125:
                 init.logger.warn("Token刷新后仍然失败")
-        if isinstance(response, dict) and 'code' in response:
-            code = response['code']
+        if isinstance(response, dict) and "code" in response:
+            code = response["code"]
             if code in (40140116, 40140119):
                 init.logger.warn("Access token 已过期，请重新授权！")
             elif code == 40140118:
@@ -81,6 +92,7 @@ def handle_token_expiry(func: Callable[..., Any]) -> Callable[..., Any]:
             elif code == 40140108:
                 init.logger.warn("应用审核未通过，请稍后再试！")
         return response
+
     return wrapper
 
 
@@ -96,7 +108,7 @@ class OpenAPI_115:
         self.file_info_cache: dict[str, Any] = {}
         self.cache_hit: int = 0
         self.get_token()  # 初始化时获取token
-        
+
     def get_token(self) -> None:
         if not self.refresh_token or not self.access_token:
             if not os.path.exists(init.TOKEN_FILE):
@@ -105,109 +117,125 @@ class OpenAPI_115:
                     init.logger.info("正在进入PKCE授权流程，获取refresh_token...")
                     self.auth_pkce(init.require_bot_config().allowed_user, app_id)
                 else:
-                    _access_token = init.require_bot_config().access_token or ''
-                    _refresh_token = init.require_bot_config().refresh_token or ''
-                    if _access_token and _refresh_token and \
-                       _access_token.lower() != "your_access_token" and \
-                       _refresh_token.lower() != "your_refresh_token":
+                    _access_token = init.require_bot_config().access_token or ""
+                    _refresh_token = init.require_bot_config().refresh_token or ""
+                    if (
+                        _access_token
+                        and _refresh_token
+                        and _access_token.lower() != "your_access_token"
+                        and _refresh_token.lower() != "your_refresh_token"
+                    ):
                         self.access_token = _access_token
                         self.refresh_token = _refresh_token
                         init.logger.info("使用配置文件中的access_token和refresh_token")
-                        self.save_token_to_file(self.access_token, self.refresh_token, init.TOKEN_FILE)
-            with open(init.TOKEN_FILE, 'r', encoding='utf-8') as f:
+                        self.save_token_to_file(
+                            self.access_token, self.refresh_token, init.TOKEN_FILE
+                        )
+            with open(init.TOKEN_FILE, "r", encoding="utf-8") as f:
                 tokens = json.load(f)
                 # 从文件中读取access_token和refresh_token
-                self.access_token = tokens.get('access_token', '')
-                self.refresh_token = tokens.get('refresh_token', '')
-        
-        
+                self.access_token = tokens.get("access_token", "")
+                self.refresh_token = tokens.get("refresh_token", "")
+
     def auth_pkce(self, sub_user: int | str, app_id: str) -> None:
         header = {
             "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": init.USER_AGENT
+            "User-Agent": init.USER_AGENT,
         }
         verifier, challenge = self.get_challenge()
         data = {
             "client_id": app_id,
             "code_challenge": challenge,
-            "code_challenge_method": "sha256"
+            "code_challenge_method": "sha256",
         }
-        response = httpx.post("https://passportapi.115.com/open/authDeviceCode", headers=header, data=data, timeout=httpx.Timeout(30.0, connect=5.0))
+        response = httpx.post(
+            "https://passportapi.115.com/open/authDeviceCode",
+            headers=header,
+            data=data,
+            timeout=httpx.Timeout(30.0, connect=5.0),
+        )
         res = response.json()
         if response.status_code == 200:
-            uid = res['data']['uid']
-            check_time = res['data']['time']
-            qr_data = res['data']['qrcode']
-            sign = res['data']['sign']
+            uid = res["data"]["uid"]
+            check_time = res["data"]["time"]
+            qr_data = res["data"]["qrcode"]
+            sign = res["data"]["sign"]
         else:
-            init.logger.warn(f"获取二维码失败: {response.status_code} - {response.text}")
+            init.logger.warn(
+                f"获取二维码失败: {response.status_code} - {response.text}"
+            )
             raise Exception(f"Error: {response.status_code} - {response.text}")
-        
+
         # 2. 创建QRCode对象并生成图片
         qr = qrcode.QRCode(
-            version=1,               # 控制大小（1~40，默认为自动）
+            version=1,  # 控制大小（1~40，默认为自动）
             error_correction=qrcode.constants.ERROR_CORRECT_L,  # 容错率（L/M/Q/H）
-            box_size=10,             # 每个模块的像素大小
-            border=4,                # 边框宽度（模块数）
+            box_size=10,  # 每个模块的像素大小
+            border=4,  # 边框宽度（模块数）
         )
-        qr.add_data(qr_data)        # 添加文本数据
-        qr.make(fit=True)           # 自动调整版本
+        qr.add_data(qr_data)  # 添加文本数据
+        qr.make(fit=True)  # 自动调整版本
 
         # 3. 生成图片并保存为文件
         img = qr.make_image(fill_color="black", back_color="white")
-        save_path= f"{init.IMAGE_PATH}/qrcode.png"
+        save_path = f"{init.IMAGE_PATH}/qrcode.png"
         if os.path.exists(save_path):
             os.remove(save_path)
-        img.save(save_path)      # 保存为PNG
-        
+        img.save(save_path)  # 保存为PNG
+
         add_task_to_queue(sub_user, save_path, "请用115APP扫码授权！")
-        
+
         time.sleep(5)
-        params = {
-            "uid": uid,
-            "time": check_time,
-            "sign": sign
-        }
+        params = {"uid": uid, "time": check_time, "sign": sign}
         while True:
-            response = httpx.get("https://qrcodeapi.115.com/get/status/", params=params, timeout=httpx.Timeout(15.0, connect=5.0))
+            response = httpx.get(
+                "https://qrcodeapi.115.com/get/status/",
+                params=params,
+                timeout=httpx.Timeout(15.0, connect=5.0),
+            )
             if response.status_code == 200:
                 res = response.json()
-                if res['state'] == 0:
+                if res["state"] == 0:
                     init.logger.info("二维码已失效...")
                     break
                 else:
-                    if res['data'].get('status', None) is None:
+                    if res["data"].get("status", None) is None:
                         init.logger.info("等待扫码...")
                         time.sleep(2)
                         continue
                     # 1.扫码成功，等待确认
-                    if res['data']['status'] == 1:
+                    if res["data"]["status"] == 1:
                         time.sleep(1)
                         continue
-                    elif res['data']['status'] == 2:
+                    elif res["data"]["status"] == 2:
                         # 2.扫码成功，获取access_token
                         init.logger.info("二维码扫码成功，正在获取access_token...")
                         time.sleep(1)
-                        response = httpx.post("https://passportapi.115.com/open/deviceCodeToToken", headers=header, data={
-                            "uid": uid,
-                            "code_verifier": verifier
-                        }, timeout=httpx.Timeout(30.0, connect=5.0))
+                        response = httpx.post(
+                            "https://passportapi.115.com/open/deviceCodeToToken",
+                            headers=header,
+                            data={"uid": uid, "code_verifier": verifier},
+                            timeout=httpx.Timeout(30.0, connect=5.0),
+                        )
                         res = response.json()
-                        if response.status_code == 200 and 'data' in res:
-                            self.access_token = res['data']['access_token']
-                            self.refresh_token = res['data']['refresh_token']
-                            self.expires_in = res['data']['expires_in']
+                        if response.status_code == 200 and "data" in res:
+                            self.access_token = res["data"]["access_token"]
+                            self.refresh_token = res["data"]["refresh_token"]
+                            self.expires_in = res["data"]["expires_in"]
                             init.logger.info("access_token获取成功！")
-                            self.save_token_to_file(self.access_token, self.refresh_token, init.TOKEN_FILE)
+                            self.save_token_to_file(
+                                self.access_token, self.refresh_token, init.TOKEN_FILE
+                            )
                             break
-              
-                        
+
     def _load_token_from_file(self) -> tuple[str, str]:
         if os.path.exists(init.TOKEN_FILE):
             try:
-                with open(init.TOKEN_FILE, 'r', encoding='utf-8') as f:
+                with open(init.TOKEN_FILE, "r", encoding="utf-8") as f:
                     tokens = json.load(f)
-                    return tokens.get('access_token', ''), tokens.get('refresh_token', '')
+                    return tokens.get("access_token", ""), tokens.get(
+                        "refresh_token", ""
+                    )
             except Exception as e:
                 init.logger.warn(f"读取Token文件失败: {e}")
         return "", ""
@@ -218,8 +246,12 @@ class OpenAPI_115:
         retry=retry_if_exception(_retryable_httpx_exception),
         reraise=True,
     )
-    def _refresh_token_request(self, url: str, headers: dict[str, str], data: dict[str, str]) -> httpx.Response:
-        response = httpx.post(url, headers=headers, data=data, timeout=httpx.Timeout(30.0, connect=5.0))
+    def _refresh_token_request(
+        self, url: str, headers: dict[str, str], data: dict[str, str]
+    ) -> httpx.Response:
+        response = httpx.post(
+            url, headers=headers, data=data, timeout=httpx.Timeout(30.0, connect=5.0)
+        )
         if response.status_code >= 500:
             response.raise_for_status()
         return response
@@ -227,7 +259,7 @@ class OpenAPI_115:
     def refresh_access_token(self) -> None:
         # 1. 尝试从文件加载最新Token
         file_access_token, file_refresh_token = self._load_token_from_file()
-        
+
         # 如果文件中的refresh_token与内存中的不一致，说明文件已被其他进程/线程更新
         if file_refresh_token and file_refresh_token != self.refresh_token:
             init.logger.info("发现本地Token文件已更新，加载新Token...")
@@ -239,22 +271,24 @@ class OpenAPI_115:
             # 如果内存无token，且文件也无token（或文件不存在）
             if not file_refresh_token:
                 init.logger.warn("请先进行授权，获取refresh_token！")
-                add_task_to_queue(init.require_bot_config().allowed_user, "/app/images/male023.png", "请先进行授权，获取refresh_token！")
+                add_task_to_queue(
+                    init.require_bot_config().allowed_user,
+                    "/app/images/male023.png",
+                    "请先进行授权，获取refresh_token！",
+                )
                 return
             # 如果内存无token但文件有
             self.access_token = file_access_token
             self.refresh_token = file_refresh_token
-        
+
         header = {
             "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": init.USER_AGENT
+            "User-Agent": init.USER_AGENT,
         }
-        
+
         url = "https://passportapi.115.com/open/refreshToken"
-        data = {
-            "refresh_token": self.refresh_token
-        }
-        
+        data = {"refresh_token": self.refresh_token}
+
         try:
             response = self._refresh_token_request(url, header, data)
             res = response.json()
@@ -262,25 +296,28 @@ class OpenAPI_115:
             init.logger.warn(f"刷新Token请求异常: {e}")
             raise
 
-        if response.status_code == 200 and isinstance(res, dict) and res.get('state'):
-            data = res.get('data')
-            if isinstance(data, dict) and data.get('access_token'):
-                self.access_token = data['access_token']
-                self.refresh_token = data['refresh_token']
-                self.save_token_to_file(self.access_token, self.refresh_token, init.TOKEN_FILE)
+        if response.status_code == 200 and isinstance(res, dict) and res.get("state"):
+            data = res.get("data")
+            if isinstance(data, dict) and data.get("access_token"):
+                self.access_token = data["access_token"]
+                self.refresh_token = data["refresh_token"]
+                self.save_token_to_file(
+                    self.access_token, self.refresh_token, init.TOKEN_FILE
+                )
                 init.logger.info("Access token 更新成功.")
             else:
                 init.logger.warn(f"Access token 更新失败: 响应数据异常 - {res}")
                 raise Exception(f"Failed to refresh access token: invalid data format")
         else:
             init.logger.warn(f"Access token 更新失败: {res}")
-            raise Exception(f"Failed to refresh access token: {res.get('message', 'unknown error')}")
-        
+            raise Exception(
+                f"Failed to refresh access token: {res.get('message', 'unknown error')}"
+            )
 
     def _get_headers(self) -> dict[str, str]:
         return {
             "Authorization": f"Bearer {self.access_token}",
-            "User-Agent": init.USER_AGENT
+            "User-Agent": init.USER_AGENT,
         }
 
     def _acquire_request_slot(self) -> dict[str, Any] | None:
@@ -298,11 +335,19 @@ class OpenAPI_115:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=0.5, min=0.5, max=10) + wait_random(0, 0.5),
-        retry=retry_if_exception(_retryable_httpx_exception) | retry_if_result(_retryable_5xx_result),
+        retry=retry_if_exception(_retryable_httpx_exception)
+        | retry_if_result(_retryable_5xx_result),
         retry_error_callback=_return_last_outcome,
         reraise=False,
     )
-    def _make_api_request(self, method: str, url: str, params: dict[str, Any] | None = None, data: dict[str, Any] | None = None, headers: dict[str, str] | None = None) -> dict[str, Any]:
+    def _make_api_request(
+        self,
+        method: str,
+        url: str,
+        params: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """统一的API请求方法，每次 attempt（含重试）都重新走限流"""
         risk_resp = self._acquire_request_slot()
         if risk_resp:
@@ -312,14 +357,25 @@ class OpenAPI_115:
             headers = self._get_headers()
 
         timeout = httpx.Timeout(30.0, connect=5.0)
-        response = httpx.request(method.upper(), url, headers=headers, params=params, data=data, timeout=timeout)
+        response = httpx.request(
+            method.upper(),
+            url,
+            headers=headers,
+            params=params,
+            data=data,
+            timeout=timeout,
+        )
 
         if response.status_code == 200:
             return response.json()
 
         init.logger.warn(f"API请求失败: {response.status_code} - {response.text}")
-        return {"code": response.status_code, "message": response.text, "_http_status": response.status_code}
-    
+        return {
+            "code": response.status_code,
+            "message": response.text,
+            "_http_status": response.status_code,
+        }
+
     @handle_token_expiry
     def get_file_info(self, path: str) -> dict[str, Any] | None:
         # 优先从缓存获取
@@ -330,39 +386,38 @@ class OpenAPI_115:
             self.cache_hit += 1
             return data
 
-
         url = f"{self.base_url}/open/folder/get_info"
         params = {"path": path}
-        response = self._make_api_request('GET', url, params=params)
-        
+        response = self._make_api_request("GET", url, params=params)
+
         # 如果成功获取文件信息，记录日志
-        if isinstance(response, dict) and response.get('code') == 0:
+        if isinstance(response, dict) and response.get("code") == 0:
             init.logger.debug(f"获取文件信息成功: {response}")
             # 更新缓存
-            self.file_info_cache[path] = (response['data'])
-            return response['data']
+            self.file_info_cache[path] = response["data"]
+            return response["data"]
         else:
             init.logger.warn(f"获取文件信息失败: {response}")
-            if response['code'] == 40140125:
+            if response["code"] == 40140125:
                 return response
             return None
-        
+
     @handle_token_expiry
     def get_file_info_by_id(self, file_id: str) -> dict[str, Any] | None:
         url = f"{self.base_url}/open/folder/get_info"
         params = {"file_id": file_id}
-        response = self._make_api_request('GET', url, params=params)
-        
+        response = self._make_api_request("GET", url, params=params)
+
         # 如果成功获取文件信息，记录日志
-        if isinstance(response, dict) and response.get('code') == 0:
+        if isinstance(response, dict) and response.get("code") == 0:
             init.logger.debug(f"获取文件信息成功: {response}")
-            return response['data']
+            return response["data"]
         else:
             init.logger.warn(f"获取文件信息失败: {response}")
-            if response['code'] == 40140125:
+            if response["code"] == 40140125:
                 return response
             return None
-    
+
     @handle_token_expiry
     def offline_download(self, download_url: str) -> bool | dict[str, Any] | None:
         url = f"{self.base_url}/open/offline/add_task_urls"
@@ -370,32 +425,33 @@ class OpenAPI_115:
         if not file_info:
             init.logger.warn(f"获取离线下载目录信息失败: {file_info}")
             return False
-        
-        data = {
-            "urls": download_url,
-            "wp_path_id": file_info['file_id']
-        }
-        response = self._make_api_request('POST', url, data=data, headers=self._get_headers())
-        if response['state'] == True:
+
+        data = {"urls": download_url, "wp_path_id": file_info["file_id"]}
+        response = self._make_api_request(
+            "POST", url, data=data, headers=self._get_headers()
+        )
+        if response["state"] == True:
             init.logger.info(f"离线下载任务添加成功: {response['message']}")
             return True
         else:
             init.logger.warn(f"离线下载任务添加失败: {response['message']}")
-            if response['code'] == 40140125:
+            if response["code"] == 40140125:
                 return response
             return None
-    
+
     @handle_token_expiry
-    def offline_download_specify_path(self, download_url: str, save_path: str) -> bool | dict[str, Any]:
+    def offline_download_specify_path(
+        self, download_url: str, save_path: str
+    ) -> bool | dict[str, Any]:
         save_path = os.path.normpath(save_path)
         url = f"{self.base_url}/open/offline/add_task_urls"
         file_info = self.get_file_info(save_path)
-        
+
         if not file_info:
             created_info = self.create_dir_recursive(save_path)
             if created_info:
                 file_info = created_info
-            
+
             # Create directory might have lag, retry getting info
             if not file_info:
                 for _ in range(3):
@@ -403,75 +459,84 @@ class OpenAPI_115:
                     if file_info:
                         break
                     time.sleep(2)
-        
-        data = {
-            "urls": download_url,
-            "wp_path_id": file_info['file_id']
-        }
-        response = self._make_api_request('POST', url, data=data, headers=self._get_headers())
-        if response['state'] == True:
+
+        data = {"urls": download_url, "wp_path_id": file_info["file_id"]}
+        response = self._make_api_request(
+            "POST", url, data=data, headers=self._get_headers()
+        )
+        if response["state"] == True:
             init.logger.info(f"离线下载任务添加成功: {response}")
             return True
         else:
-            if response['code'] == 40140125:
+            if response["code"] == 40140125:
                 return response
             init.logger.warn(f"离线下载任务添加失败: {response['message']}")
-            raise Exception(response['message'])
+            raise Exception(response["message"])
 
     # @handle_token_expiry
     def get_offline_tasks_by_page(self, page: int = 1) -> dict[str, Any] | None:
         url = f"{self.base_url}/open/offline/get_task_list"
         params = {"page": page}
-        response = self._make_api_request('GET', url, params=params)
-        if isinstance(response, dict) and response.get('code') == 0 and 'data' in response:
-            return response['data'] 
+        response = self._make_api_request("GET", url, params=params)
+        if (
+            isinstance(response, dict)
+            and response.get("code") == 0
+            and "data" in response
+        ):
+            return response["data"]
         else:
             init.logger.warn(f"获取离线下载任务列表失败: {response}")
-            if isinstance(response, dict) and response.get('code') == 40140125:
-                if response['code'] == 40140125:
+            if isinstance(response, dict) and response.get("code") == 40140125:
+                if response["code"] == 40140125:
                     return response
             return None
-    
+
     @handle_token_expiry
     def get_offline_tasks(self) -> list[dict[str, Any]] | dict[str, Any] | None:
         url = f"{self.base_url}/open/offline/get_task_list"
-        response = self._make_api_request('GET', url)
+        response = self._make_api_request("GET", url)
         task_list = []
-        if isinstance(response, dict) and response.get('code') == 0 and 'data' in response:
-            page_count = response['data'].get('page_count', 1)
+        if (
+            isinstance(response, dict)
+            and response.get("code") == 0
+            and "data" in response
+        ):
+            page_count = response["data"].get("page_count", 1)
             for i in range(1, page_count + 1):
                 tasks = self.get_offline_tasks_by_page(i)
-                if tasks and 'tasks' in tasks:
-                    for task in tasks['tasks']:
-                        task_list.append({
-                            'name': task['name'],
-                            'url': task['url'],
-                            'status': task['status'],
-                            'percentDone': task['percentDone'],
-                            'info_hash': task['info_hash'],
-                            'file_id': task['file_id'],               # 最终目录id
-                            'wp_path_id': task['wp_path_id'],         # 下载目录id
-                            'delete_file_id': task['delete_file_id']  # 同file_id
-                        })
+                if tasks and "tasks" in tasks:
+                    for task in tasks["tasks"]:
+                        task_list.append(
+                            {
+                                "name": task["name"],
+                                "url": task["url"],
+                                "status": task["status"],
+                                "percentDone": task["percentDone"],
+                                "info_hash": task["info_hash"],
+                                "file_id": task["file_id"],  # 最终目录id
+                                "wp_path_id": task["wp_path_id"],  # 下载目录id
+                                "delete_file_id": task["delete_file_id"],  # 同file_id
+                            }
+                        )
                 time.sleep(2)  # 避免请求过快
-            return task_list  
+            return task_list
         else:
             init.logger.warn(f"获取离线下载任务列表失败: {response}")
-            if isinstance(response, dict) and response.get('code') == 40140125:
-                if response['code'] == 40140125:
+            if isinstance(response, dict) and response.get("code") == 40140125:
+                if response["code"] == 40140125:
                     return response
             return None
-    
-    
+
     @handle_token_expiry
-    def del_offline_task(self, info_hash: str, del_source_file: int = 1) -> bool | dict[str, Any] | None:
+    def del_offline_task(
+        self, info_hash: str, del_source_file: int = 1
+    ) -> bool | dict[str, Any] | None:
         url = f"{self.base_url}/open/offline/del_task"
-        data = {
-            "info_hash": info_hash,
-            "del_source_file": del_source_file
-        }
-        response = self._make_api_request('POST', url, data=data, headers=self._get_headers())
-        if response['state'] == True:
+        data = {"info_hash": info_hash, "del_source_file": del_source_file}
+        response = self._make_api_request(
+            "POST", url, data=data, headers=self._get_headers()
+        )
+        if response["state"] == True:
             if del_source_file == 1:
                 init.logger.info(f"清理失败的离线下载任务成功!")
             else:
@@ -479,12 +544,14 @@ class OpenAPI_115:
             return True
         else:
             init.logger.warn(f"清理离线下载任务失败: {response['message']}")
-            if response['code'] == 40140125:
+            if response["code"] == 40140125:
                 return response
             return None
-        
+
     @handle_token_expiry
-    def copy_file(self, source_path: str, target_path: str, nodupli: int = 1) -> bool | dict[str, Any] | None:
+    def copy_file(
+        self, source_path: str, target_path: str, nodupli: int = 1
+    ) -> bool | dict[str, Any] | None:
         """复制文件或目录"""
         src_file_info = self.get_file_info(source_path)
         if not src_file_info:
@@ -496,83 +563,83 @@ class OpenAPI_115:
             init.logger.warn(f"获取目标文件信息失败: {dst_file_info}")
             return False
 
-        file_id = src_file_info['file_id']
-        to_cid = dst_file_info['file_id']
+        file_id = src_file_info["file_id"]
+        to_cid = dst_file_info["file_id"]
         url = f"{self.base_url}/open/ufile/copy"
-        data = {
-            "pid": to_cid,
-            "file_id": file_id,
-            "nodupli": nodupli
-        }
-        response = self._make_api_request('POST', url, data=data, headers=self._get_headers())
-        if response['state'] == True:
+        data = {"pid": to_cid, "file_id": file_id, "nodupli": nodupli}
+        response = self._make_api_request(
+            "POST", url, data=data, headers=self._get_headers()
+        )
+        if response["state"] == True:
             init.logger.info(f"文件复制成功: [{source_path}] -> [{target_path}]")
             return True
         else:
             init.logger.warn(f"文件复制失败: {response['message']}")
-            if response['code'] == 40140125:
+            if response["code"] == 40140125:
                 return response
         return None
-    
-    @handle_token_expiry      
+
+    @handle_token_expiry
     def rename(self, old_name: str, new_name: str) -> bool | dict[str, Any] | None:
         """重命名文件或目录"""
         file_info = self.get_file_info(old_name)
         if not file_info:
             init.logger.warn(f"获取文件信息失败: {file_info}")
             return False
-        
-        file_id = file_info['file_id']
+
+        file_id = file_info["file_id"]
         url = f"{self.base_url}/open/ufile/update"
-        data = {
-            "file_id": file_id,
-            "file_name": new_name
-        }
-        response = self._make_api_request('POST', url, data=data, headers=self._get_headers())
-        if response['state'] == True:
+        data = {"file_id": file_id, "file_name": new_name}
+        response = self._make_api_request(
+            "POST", url, data=data, headers=self._get_headers()
+        )
+        if response["state"] == True:
             init.logger.info(f"文件重命名成功: [{old_name}] -> [{new_name}]")
-            
+
             # 1. 清除旧名称缓存
             if old_name in self.file_info_cache:
                 del self.file_info_cache[old_name]
-            
+
             # 2. 关键修复：清除新名称可能存在的全部缓存
             # 避免因缓存了旧同名目录的ID，导致get_files_from_dir获取到错误的文件列表
             try:
                 # 获取父目录
                 parent_dir = str(Path(old_name).parent)
                 full_new_path = f"{parent_dir}/{new_name}"
-                
+
                 # 如果新路径在缓存中（可能是旧的ID），必须清除
                 if full_new_path in self.file_info_cache:
-                    init.logger.info(f"发现新名称[{full_new_path}]的脏缓存，正在清除...")
+                    init.logger.info(
+                        f"发现新名称[{full_new_path}]的脏缓存，正在清除..."
+                    )
                     del self.file_info_cache[full_new_path]
             except Exception as e:
                 init.logger.warn(f"清除新名称缓存异常: {e}")
-                
+
             return True
         else:
             init.logger.warn(f"文件重命名失败: {response['message']}")
-            if response['code'] == 40140125:
+            if response["code"] == 40140125:
                 return response
             return None
-        
+
     @handle_token_expiry
-    def rename_by_id(self, file_id: str, old_name: str, new_name: str) -> bool | dict[str, Any] | None:
+    def rename_by_id(
+        self, file_id: str, old_name: str, new_name: str
+    ) -> bool | dict[str, Any] | None:
         """重命名文件或目录"""
         url = f"{self.base_url}/open/ufile/update"
-        data = {
-            "file_id": file_id,
-            "file_name": new_name
-        }
-        response = self._make_api_request('POST', url, data=data, headers=self._get_headers())
-        if response['state'] == True:
+        data = {"file_id": file_id, "file_name": new_name}
+        response = self._make_api_request(
+            "POST", url, data=data, headers=self._get_headers()
+        )
+        if response["state"] == True:
             init.logger.info(f"文件重命名成功: [{old_name}] -> [{new_name}]")
-            
+
             # 1. 清除旧名称缓存
             if old_name in self.file_info_cache:
                 del self.file_info_cache[old_name]
-            
+
             # 2. 清除新名称缓存（防止脏数据）
             try:
                 # 尝试推断父目录（虽然rename_by_id不一定能准确拿到父path，但如果有old_name是全路径则可以）
@@ -584,31 +651,35 @@ class OpenAPI_115:
                         del self.file_info_cache[full_new_path]
             except Exception as e:
                 init.logger.warn(f"清除新名称缓存异常: {e}")
-                
+
             return True
         else:
             init.logger.warn(f"文件重命名失败: {response['message']}")
-            if response['code'] == 40140125:
+            if response["code"] == 40140125:
                 return response
             return None
-            
+
     @handle_token_expiry
     def get_file_list(self, params: dict[str, Any]) -> Any:
         """获取指定目录下的所有文件"""
         url = f"{self.base_url}/open/ufile/files"
-        response = self._make_api_request('GET', url, params=params, headers=self._get_headers())
-        
-        if isinstance(response, dict) and response.get('code') == 0:
+        response = self._make_api_request(
+            "GET", url, params=params, headers=self._get_headers()
+        )
+
+        if isinstance(response, dict) and response.get("code") == 0:
             init.logger.debug(f"获取文件列表成功: {response}")
-            return response['data']
+            return response["data"]
         else:
             init.logger.warn(f"获取文件列表失败: {response}")
-            if response['code'] == 40140125:
+            if response["code"] == 40140125:
                 return response
             return None
-        
+
     @handle_token_expiry
-    def create_directory(self, pid: int | str, file_name: str) -> dict[str, Any] | bool | None:
+    def create_directory(
+        self, pid: int | str, file_name: str
+    ) -> dict[str, Any] | bool | None:
         """创建目录"""
         url = f"{self.base_url}/open/folder/add"
         # 恢复使用 file_name，因为之前是工作的
@@ -616,12 +687,16 @@ class OpenAPI_115:
             "pid": pid,
             "file_name": file_name,
         }
-        response = self._make_api_request('POST', url, data=data, headers=self._get_headers())
-        
+        response = self._make_api_request(
+            "POST", url, data=data, headers=self._get_headers()
+        )
+
         # 兼容两种判断方式
-        if isinstance(response, dict) and (response.get('state') == True or response.get('code') == 0):
+        if isinstance(response, dict) and (
+            response.get("state") == True or response.get("code") == 0
+        ):
             init.logger.info(f"目录创建成功: {file_name}")
-            
+
             # 刷新可能存在的缓存：
             # 1. 如果我们能根据 pid 反推父目录路径，应该清理父目录路径下 file_name 的缓存
             #    但这里只有 pid，很难反推路径。只能假设调用方会重新获取。
@@ -629,139 +704,150 @@ class OpenAPI_115:
             #    或者该目录曾存在->删除->重建，那么缓存中的旧 ID 必须清除。
             #    由于无法根据 pid 轻易拼出完整路径，这里无法像 rename 那样精确清除。
             #    建议调用 create_directory 的地方，如果涉及到完整路径的缓存，手动清除。
-            
-            return response.get('data') or True
-        elif response.get('code') == 20004:
+
+            return response.get("data") or True
+        elif response.get("code") == 20004:
             init.logger.info(f"目录已存在: {file_name}")
             return True
         else:
             init.logger.warn(f"目录创建失败: {response}")
-            if response['code'] == 40140125:
+            if response["code"] == 40140125:
                 return response
             return None
-        
+
     @handle_token_expiry
     def delet_file(self, file_ids: str) -> bool | dict[str, Any] | None:
         """删除文件或目录"""
         url = f"{self.base_url}/open/ufile/delete"
-        data = {
-            "file_ids": file_ids
-        }
-        response = self._make_api_request('POST', url, data=data, headers=self._get_headers())
-        if response['state'] == True:
+        data = {"file_ids": file_ids}
+        response = self._make_api_request(
+            "POST", url, data=data, headers=self._get_headers()
+        )
+        if response["state"] == True:
             init.logger.info(f"文件或目录删除成功: {file_ids}")
             return True
         else:
             init.logger.warn(f"文件或目录删除失败: {response}")
-            if response['code'] == 40140125:
+            if response["code"] == 40140125:
                 return response
             return None
-    
+
     def _batch_delete_files(self, fid_list: list[str], batch_size: int = 100) -> None:
         """分批删除文件，避免单次请求过长
-        
+
         Args:
             fid_list: 文件ID列表
             batch_size: 每批删除的文件数量，默认100
         """
         if not fid_list:
             return
-            
+
         total_files = len(fid_list)
         init.logger.info(f"准备分批删除 {total_files} 个文件，每批 {batch_size} 个")
-        
+
         # 分批处理
         for i in range(0, total_files, batch_size):
-            batch = fid_list[i:i + batch_size]
+            batch = fid_list[i : i + batch_size]
             batch_num = (i // batch_size) + 1
             total_batches = (total_files + batch_size - 1) // batch_size
-            
-            init.logger.info(f"正在执行第 {batch_num}/{total_batches} 批删除操作，共 {len(batch)} 个文件")
-            
+
+            init.logger.info(
+                f"正在执行第 {batch_num}/{total_batches} 批删除操作，共 {len(batch)} 个文件"
+            )
+
             file_ids = ",".join(batch)
             result = self.delet_file(file_ids)
-            
+
             if result is True:
                 init.logger.info(f"第 {batch_num} 批删除成功")
             else:
                 init.logger.warn(f"第 {batch_num} 批删除失败: {result}")
-            
+
             # 批次间添加短暂延迟，避免请求过快
             if i + batch_size < total_files:
                 time.sleep(1)
         # 等待服务器处理删除请求
         time.sleep(10)
-        
+
     @handle_token_expiry
     def delete_single_file(self, path: str) -> bool | dict[str, Any] | None:
         """删除单个文件"""
         file_info = self.get_file_info(path)
         if not file_info:
             return None
-        file_id = file_info['file_id']
+        file_id = file_info["file_id"]
         url = f"{self.base_url}/open/ufile/delete"
-        data = {
-            "file_ids": file_id
-        }
-        response = self._make_api_request('POST', url, data=data, headers=self._get_headers())
-        if response['state'] == True:
+        data = {"file_ids": file_id}
+        response = self._make_api_request(
+            "POST", url, data=data, headers=self._get_headers()
+        )
+        if response["state"] == True:
             init.logger.info(f"文件(夹)删除成功: {path}")
             if path in self.file_info_cache:
                 del self.file_info_cache[path]
             return True
         else:
             init.logger.warn(f"文件(夹)删除失败: {response['message']}")
-            if response['code'] == 40140125:
+            if response["code"] == 40140125:
                 return response
             return None
 
     @handle_token_expiry
     def upload_file(self, **kwargs: Any) -> tuple[bool, bool] | None:
         """上传文件"""
-        target = kwargs.get('target') 
+        target = kwargs.get("target")
         file_info = self.get_file_info(target)
         if not file_info:
             init.logger.warn(f"获取目标目录信息失败: {file_info}")
             return False, False
         target = f"U_1_{file_info['file_id']}"
         url = f"{self.base_url}/open/upload/init"
-        if not kwargs.get('sign_key') and not kwargs.get('sign_val'):
+        if not kwargs.get("sign_key") and not kwargs.get("sign_val"):
             # 如果没有提供sign_key和sign_val，则直接使用文件名和大小
             data = {
-                "file_name": kwargs.get('file_name', ''),
-                "file_size": kwargs.get('file_size', 0),    
+                "file_name": kwargs.get("file_name", ""),
+                "file_size": kwargs.get("file_size", 0),
                 "target": target,  # 0: 根目录, 1: 指定目录
-                "fileid": kwargs.get('fileid', '')
+                "fileid": kwargs.get("fileid", ""),
             }
         else:
             # 如果提供了sign_key和sign_val，则使用它们进行二次认证
             data = {
-                "file_name": kwargs.get('file_name', ''),
-                "file_size": kwargs.get('file_size', 0),    
+                "file_name": kwargs.get("file_name", ""),
+                "file_size": kwargs.get("file_size", 0),
                 "target": target,  # 0: 根目录, 1: 指定目录
-                "fileid": kwargs.get('fileid', ''),
-                "sign_key": kwargs.get('sign_key'),
-                "sign_val": kwargs.get('sign_val')
+                "fileid": kwargs.get("fileid", ""),
+                "sign_key": kwargs.get("sign_key"),
+                "sign_val": kwargs.get("sign_val"),
             }
-        response = self._make_api_request('POST', url, data=data, headers=self._get_headers())
-        if isinstance(response, dict) and response.get('code') == 0:
-            init.logger.info(response['data'])
+        response = self._make_api_request(
+            "POST", url, data=data, headers=self._get_headers()
+        )
+        if isinstance(response, dict) and response.get("code") == 0:
+            init.logger.info(response["data"])
             # 需要二次认证
-            if response['data']['sign_key'] and response['data']['sign_check'] and kwargs.get('request_times') == 1:
-                sign_check = response['data']['sign_check'].split('-')
-                sign_val = file_sha1_by_range(kwargs.get('file_path', ''), int(sign_check[0]), int(sign_check[1])).upper()
+            if (
+                response["data"]["sign_key"]
+                and response["data"]["sign_check"]
+                and kwargs.get("request_times") == 1
+            ):
+                sign_check = response["data"]["sign_check"].split("-")
+                sign_val = file_sha1_by_range(
+                    kwargs.get("file_path", ""), int(sign_check[0]), int(sign_check[1])
+                ).upper()
                 return self.upload_file(
-                    file_name=kwargs.get('file_name', ''),
-                    file_size=kwargs.get('file_size', 0),    
-                    target=kwargs.get('target'),
-                    fileid=kwargs.get('fileid', ''),
-                    file_path=kwargs.get('file_path', ''),  # 添加这个参数
-                    sign_key=response['data']['sign_key'],
+                    file_name=kwargs.get("file_name", ""),
+                    file_size=kwargs.get("file_size", 0),
+                    target=kwargs.get("target"),
+                    fileid=kwargs.get("fileid", ""),
+                    file_path=kwargs.get("file_path", ""),  # 添加这个参数
+                    sign_key=response["data"]["sign_key"],
                     sign_val=sign_val,
-                    request_times=2)
-            if response['data']['status'] != 2:
+                    request_times=2,
+                )
+            if response["data"]["status"] != 2:
                 # 秒传失败，需要上传到阿里服务器时
-                callback_params = response['data'].get('callback', {})
+                callback_params = response["data"].get("callback", {})
                 if callback_params:
                     # 获取上传token
                     token_info = self.get_upload_token()
@@ -769,22 +855,22 @@ class OpenAPI_115:
                         init.logger.warn("获取上传token失败")
                         return False, False
                     # 准备上传参数
-                    access_key_id = token_info['AccessKeyId']
-                    access_key_secret = token_info['AccessKeySecret']
-                    security_token = token_info['SecurityToken']
-                    endpoint = token_info['endpoint']
-                    bucket = response['data']['bucket']
-                    object_key = response['data']['object']
-                    pick_code = response['data']['pick_code']
-                    region = 'cn-shenzhen'
-                    callback_body_str = callback_params.get('callback', '{}')
-                    callback_vars_str = callback_params.get('callback_var', '{}')
+                    access_key_id = token_info["AccessKeyId"]
+                    access_key_secret = token_info["AccessKeySecret"]
+                    security_token = token_info["SecurityToken"]
+                    endpoint = token_info["endpoint"]
+                    bucket = response["data"]["bucket"]
+                    object_key = response["data"]["object"]
+                    pick_code = response["data"]["pick_code"]
+                    region = "cn-shenzhen"
+                    callback_body_str = callback_params.get("callback", "{}")
+                    callback_vars_str = callback_params.get("callback_var", "{}")
 
                     # 构造回调参数（callback）：指定回调地址和回调请求体，使用 Base64 编码
-                    callback=base64.b64encode(callback_body_str.encode()).decode()
+                    callback = base64.b64encode(callback_body_str.encode()).decode()
                     # 构造自定义变量（callback-var），使用 Base64 编码
-                    callback_var=base64.b64encode(callback_vars_str.encode()).decode()
-                    
+                    callback_var = base64.b64encode(callback_vars_str.encode()).decode()
+
                     # 上传文件到阿里云OSS
                     try:
                         init.logger.info(f"开始上传文件: {kwargs.get('file_name', '')}")
@@ -794,18 +880,22 @@ class OpenAPI_115:
                             security_token=security_token,
                             endpoint=endpoint,
                             bucket=bucket,
-                            file_path=kwargs.get('file_path', ''),
+                            file_path=kwargs.get("file_path", ""),
                             key=object_key,
                             region=region,
                             callback=callback,
-                            callback_var=callback_var
+                            callback_var=callback_var,
                         )
-                        
+
                         if upload_result:
-                            init.logger.info(f"[{kwargs.get('file_name', '')}]上传成功！")
+                            init.logger.info(
+                                f"[{kwargs.get('file_name', '')}]上传成功！"
+                            )
                             return True, False
                         else:
-                            init.logger.warn(f"[{kwargs.get('file_name', '')}]上传失败!")
+                            init.logger.warn(
+                                f"[{kwargs.get('file_name', '')}]上传失败!"
+                            )
                             return False, False
                     except Exception as e:
                         init.logger.warn(f"上传文件到OSS时出错: {e}")
@@ -816,149 +906,140 @@ class OpenAPI_115:
         else:
             init.logger.warn(f"文件上传初始化失败: {response['message']}")
             return False, False
-    
-    
+
     @handle_token_expiry
     def get_upload_token(self) -> dict[str, Any] | None:
         """获取上传文件的token"""
         url = f"{self.base_url}/open/upload/get_token"
-        response = self._make_api_request('GET', url)
-        
-        if isinstance(response, dict) and response.get('code') == 0:
+        response = self._make_api_request("GET", url)
+
+        if isinstance(response, dict) and response.get("code") == 0:
             init.logger.info(f"获取上传token成功: {response}")
-            return response['data']
+            return response["data"]
         else:
             init.logger.warn(f"获取上传token失败: {response}")
-            if response['code'] == 40140125:
-                    return response
+            if response["code"] == 40140125:
+                return response
         return None
-    
-        
+
     @handle_token_expiry
     def get_user_info(self) -> dict[str, Any] | None:
         """获取用户信息"""
         url = f"{self.base_url}/open/user/info"
-        response = self._make_api_request('GET', url)
-        
-        if isinstance(response, dict) and response.get('code') == 0:
+        response = self._make_api_request("GET", url)
+
+        if isinstance(response, dict) and response.get("code") == 0:
             init.logger.info(f"获取用户信息成功: {response}")
-            return response['data']
+            return response["data"]
         else:
             init.logger.warn(f"获取用户信息失败: {response}")
-            if response['code'] == 40140125:
+            if response["code"] == 40140125:
                 return response
             return None
-        
+
     @handle_token_expiry
     def get_quota_info(self) -> dict[str, Any] | None:
         """获取配额信息"""
         url = f"{self.base_url}/open/offline/get_quota_info"
-        response = self._make_api_request('GET', url)
-        
-        if isinstance(response, dict) and response.get('code') == 0:
+        response = self._make_api_request("GET", url)
+
+        if isinstance(response, dict) and response.get("code") == 0:
             init.logger.info(f"获取配额信息成功: {response}")
-            return response['data']
+            return response["data"]
         else:
             init.logger.warn(f"获取配额信息失败: {response}")
-            if response['code'] == 40140125:
+            if response["code"] == 40140125:
                 return response
             return None
-        
+
     @handle_token_expiry
     def get_file_play_url(self, file_path: str) -> str | dict[str, Any] | None:
         file_info = self.get_file_info(file_path)
         if not file_info:
             return None
-        params = {
-            "cid": file_info['file_id'],
-            "type": 4,
-            "limit": 1000
-        }
+        params = {"cid": file_info["file_id"], "type": 4, "limit": 1000}
         file_list = self.get_file_list(params)
         if not file_list:
             return None
-        video_name = file_list[0]['fn']
+        video_name = file_list[0]["fn"]
         video_info = self.get_file_info(f"{file_path}/{video_name}")
-        pick_code = video_info.get('pick_code', '')
+        pick_code = video_info.get("pick_code", "")
         url = f"{self.base_url}/open/video/play"
-        params = {
-            "pick_code": pick_code
-        }
-        response = self._make_api_request('GET', url, params=params)
-        if isinstance(response, dict) and response.get('code') == 0:
+        params = {"pick_code": pick_code}
+        response = self._make_api_request("GET", url, params=params)
+        if isinstance(response, dict) and response.get("code") == 0:
             init.logger.info(f"获取视频播放链接成功: {response}")
-            return response['data']['video_url'][0]['url']
+            return response["data"]["video_url"][0]["url"]
         else:
             init.logger.warn(f"获取视频播放链接失败: {response}")
-            if response['code'] == 40140125:
+            if response["code"] == 40140125:
                 return response
         return None
-    
+
     @handle_token_expiry
     def get_file_download_url(self, file_path: str) -> list[str] | dict[str, Any]:
         """获取文件下载链接"""
         file_info = self.get_file_info(file_path)
-        file_id = file_info['file_id']
-        videos = self.get_file_list({
-            "cid": file_id,
-            "type": 4,
-            "limit": 1,
-            "asc": 0,
-            "o": "file_size",
-            "custom_order": 1
-        })
+        file_id = file_info["file_id"]
+        videos = self.get_file_list(
+            {
+                "cid": file_id,
+                "type": 4,
+                "limit": 1,
+                "asc": 0,
+                "o": "file_size",
+                "custom_order": 1,
+            }
+        )
         url = f"{self.base_url}/open/ufile/downurl"
         download_urls = []
         for i in range(len(videos)):
-            data = {  
-                "pick_code": videos[0]['pc']
-            }
-            response = self._make_api_request('POST', url, data=data, headers=self._get_headers())
-            if response['state'] == True:
+            data = {"pick_code": videos[0]["pc"]}
+            response = self._make_api_request(
+                "POST", url, data=data, headers=self._get_headers()
+            )
+            if response["state"] == True:
                 init.logger.info(f"获取文件下载链接成功: {response}")
-                download_urls.append(response['data'][videos[i]['fid']]['url']['url'])
+                download_urls.append(response["data"][videos[i]["fid"]]["url"]["url"])
                 time.sleep(3)  # 避免请求过快
             else:
                 init.logger.warn(f"获取文件下载链接失败: {response}")
-                if response['code'] == 40140125:
+                if response["code"] == 40140125:
                     return response
         return download_urls
-    
-    
+
     @handle_token_expiry
     def clear_cloud_task(self, flag: int = 0) -> bool | dict[str, Any] | None:
         url = f"{self.base_url}/open/offline/clear_task"
         # 清除任务类型：0清空已完成、1清空全部、2清空失败、3清空进行中、4清空已完成任务并清空对应源文件、5清空全部任务并清空对应源文件
-        data = {
-            "flag": flag 
-        }
-        response = self._make_api_request('POST', url, data=data)
-        if response['state'] == True:
+        data = {"flag": flag}
+        response = self._make_api_request("POST", url, data=data)
+        if response["state"] == True:
             init.logger.info(f"清理云端任务成功！")
             return True
         else:
             init.logger.warn(f"清理云端任务失败: {response['message']}")
-            if response['code'] == 40140125:
+            if response["code"] == 40140125:
                 return response
             return None
-        
+
     def move_file(self, source_path: str, target_path: str) -> bool:
         """移动文件或目录"""
         # copy_file 实际上是把文件复制到 target_path 目录下
         # 所以新文件的全路径是 target_path/basename(source_path)
-        
+
         # 1. 执行复制
         copy_result = self.copy_file(source_path, target_path)
         if copy_result == True:
             # 2. 清除目标位置可能存在的旧缓存（因为现在有了新文件）
             try:
                 # 获取源文件/目录名称
-                msg_filename = os.path.basename(source_path.rstrip('/'))
-                
+                msg_filename = os.path.basename(source_path.rstrip("/"))
+
                 # 构造目标完整路径
-                target_path_clean = target_path.rstrip('/')
+                target_path_clean = target_path.rstrip("/")
                 full_new_path = f"{target_path_clean}/{msg_filename}"
-                
+
                 if full_new_path in self.file_info_cache:
                     init.logger.info(f"清除移动目标位置[{full_new_path}]的缓存")
                     del self.file_info_cache[full_new_path]
@@ -968,7 +1049,7 @@ class OpenAPI_115:
             # 3. 执行删除源文件
             # delete_single_file 内部已经处理了 source_path 的缓存清除
             delete_result = self.delete_single_file(source_path)
-            
+
             if delete_result == True:
                 return True
             else:
@@ -977,37 +1058,50 @@ class OpenAPI_115:
         else:
             init.logger.warn(f"移动文件失败: 复制文件失败")
             return False
-    
+
     def clear_request_count(self) -> None:
         """清除请求计数"""
         self.request_count = 0
         self.cache_hit = 0
-        
+
     def welcome_message(self) -> tuple[str, str, str, str]:
         """欢迎消息"""
         user_info = self.get_user_info()
         quota_info = self.get_quota_info()
         if user_info:
-            user_name = user_info.get('user_name')
-            total_space= user_info['rt_space_info']['all_total']['size_format']
-            used_space = user_info['rt_space_info']['all_use']['size_format']
-            remaining_space = user_info['rt_space_info']['all_remain']['size_format']
-            vip_info = user_info.get('vip_info', {})
+            user_name = user_info.get("user_name")
+            total_space = user_info["rt_space_info"]["all_total"]["size_format"]
+            used_space = user_info["rt_space_info"]["all_use"]["size_format"]
+            remaining_space = user_info["rt_space_info"]["all_remain"]["size_format"]
+            vip_info = user_info.get("vip_info", {})
             # 判断永V
-            if "长期" in vip_info.get('level_name', ''):
+            if "长期" in vip_info.get("level_name", ""):
                 self.lifetime_vip = True
-            expire_date = datetime.fromtimestamp(vip_info.get('expire', 0), tz=timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
-            line1 = escape_markdown(f"👋 [{user_name}]您好， 欢迎使用Telegram-115Bot！", version=2)
-            line2 = escape_markdown(f"会员等级：{vip_info.get('level_name', '')} \n到期时间：{expire_date}", version=2)
-            line3 = escape_markdown(f"总空间：{total_space} \n已用：{used_space} \n剩余：{remaining_space}", version=2)
-            line4 = escape_markdown(f"离线配额：{quota_info['used']}/{quota_info['count']}", version=2)   
+            expire_date = datetime.fromtimestamp(
+                vip_info.get("expire", 0), tz=timezone(timedelta(hours=8))
+            ).strftime("%Y-%m-%d %H:%M:%S")
+            line1 = escape_markdown(
+                f"👋 [{user_name}]您好， 欢迎使用Telegram-115Bot！", version=2
+            )
+            line2 = escape_markdown(
+                f"会员等级：{vip_info.get('level_name', '')} \n到期时间：{expire_date}",
+                version=2,
+            )
+            line3 = escape_markdown(
+                f"总空间：{total_space} \n已用：{used_space} \n剩余：{remaining_space}",
+                version=2,
+            )
+            line4 = escape_markdown(
+                f"离线配额：{quota_info['used']}/{quota_info['count']}", version=2
+            )
             return line1, line2, line3, line4
         else:
             line1 = escape_markdown("👋 您好， 欢迎使用Telegram-115Bot！", version=2)
             return line1, "", "", ""
 
-
-    def check_offline_download_success(self, url: str, offline_timeout: int = 300) -> tuple[bool, str, str]:
+    def check_offline_download_success(
+        self, url: str, offline_timeout: int = 300
+    ) -> tuple[bool, str, str]:
         time_out = 0
         task_name = ""
         info_hash = ""
@@ -1017,11 +1111,11 @@ class OpenAPI_115:
                 return False, "", ""
             for task in tasks:
                 # 判断任务的URL是否匹配
-                if task.get('url') == url:
-                    task_name = task.get('name', '')
-                    info_hash = task.get('info_hash', '')
+                if task.get("url") == url:
+                    task_name = task.get("name", "")
+                    info_hash = task.get("info_hash", "")
                     # 检查任务状态
-                    if task.get('status') == 2 or task.get('percentDone') == 100:
+                    if task.get("status") == 2 or task.get("percentDone") == 100:
                         return True, task_name, info_hash
                     else:
                         time.sleep(10)
@@ -1029,7 +1123,7 @@ class OpenAPI_115:
                     break
         init.logger.warn(f"[{task_name}]离线下载超时!")
         return False, task_name, info_hash
-    
+
     # def check_offline_download_success(self, url, offline_timeout=180):
     #     time.sleep(offline_timeout)  # 等待下载完成
     #     task_name = ""
@@ -1051,7 +1145,6 @@ class OpenAPI_115:
     #     init.logger.warn(f"[{task_name}]离线下载超时!")
     #     return False, task_name, info_hash
 
-        
     def get_files_from_dir(self, path: str, file_type: int = 4) -> list[str]:
         """获取指定目录下的所有文件"""
         video_list = []
@@ -1059,86 +1152,81 @@ class OpenAPI_115:
         if not file_info:
             init.logger.warn(f"获取目录信息失败: {file_info}")
             return video_list
-        
+
         # 文件类型；1.文档；2.图片；3.音乐；4.视频；5.压缩；6.应用；7.书籍
-        params = {
-            "cid": file_info['file_id'],
-            "type": 4,
-            "limit": 1000
-        }
+        params = {"cid": file_info["file_id"], "type": 4, "limit": 1000}
         file_list = self.get_file_list(params)
         for file in file_list:
-            video_list.append(file['fn'])
+            video_list.append(file["fn"])
         return video_list
-    
-    def get_sync_dir(self, path: str, file_type: int = 4, offset: int = 0, limit: int = 1150) -> list[str]:
+
+    def get_sync_dir(
+        self, path: str, file_type: int = 4, offset: int = 0, limit: int = 1150
+    ) -> list[str]:
         """获取指定目录下的所有文件"""
         video_list = []
         file_info = self.get_file_info(path)
         if not file_info:
             init.logger.warn(f"获取目录信息失败: {file_info}")
             return video_list
-        
+
         # 文件类型；1.文档；2.图片；3.音乐；4.视频；5.压缩；6.应用；7.书籍
         params = {
-            "cid": file_info['file_id'],
+            "cid": file_info["file_id"],
             "type": file_type,
             "limit": limit,
-            "offset": offset
+            "offset": offset,
         }
         file_list = self.get_file_list(params)
         if not file_list:
             init.logger.warn(f"目录 {path} 中没有找到视频文件")
             return video_list
-        
+
         if len(file_list) >= limit:
             offset += limit
             self.get_sync_dir(path, file_type, offset, limit)
         else:
             for file in file_list:
-                file_info = self.get_file_info_by_id(file['pid'])
-                folder_name = file_info['file_name']
+                file_info = self.get_file_info_by_id(file["pid"])
+                folder_name = file_info["file_name"]
                 video_list.append(f"{folder_name}/{file['fn']}")
 
         return video_list
-    
+
     def is_directory(self, path: str) -> bool:
         """检查路径是否为目录"""
         file_info = self.get_file_info(path)
         if not file_info:
             init.logger.warn(f"获取文件信息失败: {file_info}")
             return False
-        
-        if file_info['file_category'] == '0':
+
+        if file_info["file_category"] == "0":
             return True
         return False
-    
-    def create_dir_for_file(self, path: str, floder_name: str) -> dict[str, Any] | bool | None:
+
+    def create_dir_for_file(
+        self, path: str, floder_name: str
+    ) -> dict[str, Any] | bool | None:
         file_info = self.get_file_info(path)
         if not file_info:
             init.logger.warn(f"获取目录信息失败: {path}")
             return False
-        
+
         # 创建文件夹
-        return self.create_directory(file_info['file_id'], floder_name)
-        
-    
+        return self.create_directory(file_info["file_id"], floder_name)
+
     def auto_clean(self, path: str) -> None:
         # 开关关闭直接返回
         if str(init.require_bot_config().clean_policy.switch).lower() == "off":
             return
-        
+
         file_info = self.get_file_info(path)
         if not file_info:
             init.logger.warn(f"获取目录信息失败: {file_info}")
             return
-        params = {
-            "cid": file_info['file_id'],
-            "limit": 1000,
-            "show_dir": 1
-        }
+        params = {"cid": file_info["file_id"], "limit": 1000, "show_dir": 1}
         file_list = self.get_file_list(params)
-        
+
         # 换算字节大小
         byte_size = 0
         less_than = init.require_bot_config().clean_policy.less_than
@@ -1149,34 +1237,29 @@ class OpenAPI_115:
                 byte_size = int(less_than[:-1]) * 1024
             elif str(less_than).upper().endswith("G"):
                 byte_size = int(less_than[:-1]) * 1024 * 1024 * 1024
-                
+
         fid_list = []
         for file in file_list:
             # 删除小于指定大小的文件
-            if file['fc'] == '1':
-                if file['fs'] < byte_size:
-                    fid_list.append(file['fid'])
+            if file["fc"] == "1":
+                if file["fs"] < byte_size:
+                    fid_list.append(file["fid"])
                     init.logger.info(f"[{file['fn']}]已添加到清理列表")
             # 目录直接删除
             else:
-                fid_list.append(file['fid'])
+                fid_list.append(file["fid"])
                 init.logger.info(f"[{file['fn']}]已添加到清理列表")
-        
+
         if fid_list:
             self._batch_delete_files(fid_list)
-            
-            
+
     def auto_clean_by_id(self, file_id: str) -> None:
         # 开关关闭直接返回
         if str(init.require_bot_config().clean_policy.switch).lower() == "off":
             return
-        params = {
-            "cid": file_id,
-            "limit": 1000,
-            "show_dir": 1
-        }
+        params = {"cid": file_id, "limit": 1000, "show_dir": 1}
         file_list = self.get_file_list(params)
-        
+
         # 换算字节大小
         byte_size = 0
         less_than = init.require_bot_config().clean_policy.less_than
@@ -1187,28 +1270,27 @@ class OpenAPI_115:
                 byte_size = int(less_than[:-1]) * 1024
             elif str(less_than).upper().endswith("G"):
                 byte_size = int(less_than[:-1]) * 1024 * 1024 * 1024
-                
+
         fid_list = []
         for file in file_list:
             # 删除小于指定大小的文件
-            if file['fc'] == '1':
-                if file['fs'] < byte_size:
-                    fid_list.append(file['fid'])
+            if file["fc"] == "1":
+                if file["fs"] < byte_size:
+                    fid_list.append(file["fid"])
                     init.logger.info(f"[{file['fn']}]已添加到清理列表")
             # 目录直接删除
             else:
-                fid_list.append(file['fid'])
+                fid_list.append(file["fid"])
                 init.logger.info(f"[{file['fn']}]已添加到清理列表")
-        
+
         if fid_list:
             self._batch_delete_files(fid_list)
-            
-    
+
     def auto_clean_all(self, path: str, clean_empty_dir: bool = False) -> None:
-         # 开关关闭直接返回
+        # 开关关闭直接返回
         if str(init.require_bot_config().clean_policy.switch).lower() == "off":
             return
-        
+
         file_info = self.get_file_info(path)
         if not file_info:
             init.logger.warn(f"获取目录信息失败: {file_info}")
@@ -1224,24 +1306,24 @@ class OpenAPI_115:
                 byte_size = int(less_than[:-1]) * 1024
             elif str(less_than).upper().endswith("G"):
                 byte_size = int(less_than[:-1]) * 1024 * 1024 * 1024
-        
+
         # 找到所有垃圾文件
-        junk_file_list = self.find_all_junk_files(file_info['file_id'], 0, byte_size)
+        junk_file_list = self.find_all_junk_files(file_info["file_id"], 0, byte_size)
         if not junk_file_list:
             init.logger.info(f"[{path}]下没有找到需要清理的垃圾文件！")
             return
-                
+
         fid_list = []
         pid_list = []
         for file in junk_file_list:
-            fid_list.append(file['fid'])
+            fid_list.append(file["fid"])
             init.logger.info(f"[{file['fn']}]已添加到清理列表")
-            if file['pid'] not in pid_list:
-                pid_list.append(file['pid'])
-        
+            if file["pid"] not in pid_list:
+                pid_list.append(file["pid"])
+
         if fid_list:
             self._batch_delete_files(fid_list)
-        
+
         # 清理空目录
         if clean_empty_dir:
             empty_dir_list = self.find_all_empty_dirs(pid_list)
@@ -1255,26 +1337,33 @@ class OpenAPI_115:
             if fid_list:
                 self._batch_delete_files(fid_list)
 
-    def find_all_junk_files(self, cid: str, offset: int, byte_size: int, file_list: list[dict[str, Any]] | None = None, limit: int = 1150) -> list[dict[str, Any]]:
+    def find_all_junk_files(
+        self,
+        cid: str,
+        offset: int,
+        byte_size: int,
+        file_list: list[dict[str, Any]] | None = None,
+        limit: int = 1150,
+    ) -> list[dict[str, Any]]:
         """
         递归查找所有小于指定大小的垃圾文件
-        
+
         使用分页查询和文件大小排序优化，当最后一个文件仍小于目标大小时继续递归查找，
         否则停止查询并过滤返回小于目标大小的文件。
-        
+
         Args:
             cid: 目录ID
             offset: 偏移量，用于分页
             byte_size: 目标文件大小（字节），小于此大小的文件被视为垃圾文件
             file_list: 已找到的文件列表，用于递归累积
             limit: 每页查询的文件数量，默认1150
-            
+
         Returns:
             list: 所有小于目标大小的文件列表，包含文件的fid、fn、fs等信息
         """
         if file_list is None:
             file_list = []
-            
+
         params = {
             "cid": cid,
             "limit": limit,
@@ -1282,33 +1371,33 @@ class OpenAPI_115:
             "custom_order": 1,
             "asc": 1,
             "o": "file_size",
-            "offset": offset
+            "offset": offset,
         }
-        
+
         # 获取当前页的文件列表
         current_files = self.get_file_list(params)
-        
+
         # 如果API调用失败或没有获取到文件，说明已经到末尾或出现错误
         if not current_files:
             # 过滤掉大于等于目标大小的文件，只返回垃圾文件
-            junk_files = [f for f in file_list if f['fs'] < byte_size]
+            junk_files = [f for f in file_list if f["fs"] < byte_size]
             return junk_files
-            
+
         # 将当前页的文件添加到结果列表
         file_list.extend(current_files)
-        
+
         # 检查是否还有下一页
         if len(current_files) < limit:
-             # 当前页不满limit，说明已经是最后一页了
-            junk_files = [f for f in file_list if int(f.get('fs', 0)) < byte_size]
+            # 当前页不满limit，说明已经是最后一页了
+            junk_files = [f for f in file_list if int(f.get("fs", 0)) < byte_size]
             return junk_files
 
         # 检查最后一个文件的大小
         try:
-             last_file_size = int(current_files[-1].get('fs', 0))
+            last_file_size = int(current_files[-1].get("fs", 0))
         except (ValueError, TypeError, IndexError):
-             last_file_size = 0
-        
+            last_file_size = 0
+
         # 如果最后一个文件大小仍然小于目标大小，且还有更多文件（上面已经判断了是否满页），继续递归查找
         if last_file_size < byte_size:
             offset += limit
@@ -1316,35 +1405,42 @@ class OpenAPI_115:
             return self.find_all_junk_files(cid, offset, byte_size, file_list)
         else:
             # 已经找到所有小于目标大小的文件，过滤掉大于等于目标大小的文件
-            junk_files = [f for f in file_list if int(f.get('fs', 0)) < byte_size]
+            junk_files = [f for f in file_list if int(f.get("fs", 0)) < byte_size]
             return junk_files
-        
+
     def find_all_empty_dirs(self, pid_list: list[str]) -> list[str]:
         """
         pid_list: 目录ID列表
-            
+
         Returns:
             list: 所有空目录列表，包含目录的fid、fn等信息
         """
         empty_dir_list = []
         for pid in pid_list:
             file_info = self.get_file_info_by_id(pid)
-            if file_info and (file_info['size_byte'] == 0 or file_info['count'] == 0):
+            if file_info and (file_info["size_byte"] == 0 or file_info["count"] == 0):
                 empty_dir_list.append(pid)
             time.sleep(0.1)  # 避免请求过快
         return empty_dir_list
-    
-    
-    def find_all_voideos(self, path: str, success_task: list[dict[str, Any]], time_stamp: int, offset: int = 0, video_list: list[dict[str, Any]] | None = None, limit: int = 1150) -> list[dict[str, Any]]:
+
+    def find_all_voideos(
+        self,
+        path: str,
+        success_task: list[dict[str, Any]],
+        time_stamp: int,
+        offset: int = 0,
+        video_list: list[dict[str, Any]] | None = None,
+        limit: int = 1150,
+    ) -> list[dict[str, Any]]:
         file_info = self.get_file_info(path)
         if not file_info:
             init.logger.warn(f"获取目录信息失败: {path}")
             return []
-            
-        cid = file_info['file_id']
+
+        cid = file_info["file_id"]
         if video_list is None:
             video_list = []
-            
+
         params = {
             "cid": cid,
             "type": 4,
@@ -1353,49 +1449,55 @@ class OpenAPI_115:
             "custom_order": 1,
             "asc": 0,
             "o": "user_utime",
-            "offset": offset
+            "offset": offset,
         }
         current_files = self.get_file_list(params)
-        
+
         stop_searching = False
-        
+
         if current_files:
             for item in current_files:
-                diff = time_stamp - item['upt']
+                diff = time_stamp - item["upt"]
                 # 寻找 time_stamp 前 600 秒内上传的文件（包含最新的）
                 if diff > 600:
                     # 文件太旧，且后续更旧，停止
                     stop_searching = True
                     break
                 else:
-                    video_list.append({"pid": item['pid'], 'name': item['fn']})
-            
+                    video_list.append({"pid": item["pid"], "name": item["fn"]})
+
             # 如果没有遇到太旧的文件，且当前页是满的，继续翻页
             if not stop_searching and len(current_files) == limit:
                 offset += limit
-                return self.find_all_voideos(path, success_task, time_stamp, offset, video_list, limit)
-        
+                return self.find_all_voideos(
+                    path, success_task, time_stamp, offset, video_list, limit
+                )
+
         result = []
         for video in video_list:
             for item in success_task:
                 # 兼容 offline_task_retry.py 传入的包装结构 {"task": task, "save_path": ...}
-                task = item['task'] if isinstance(item, dict) and 'task' in item else item
-                if video['pid'] == task.get('file_id'):
+                task = (
+                    item["task"] if isinstance(item, dict) and "task" in item else item
+                )
+                if video["pid"] == task.get("file_id"):
                     # 优先从item中获取image_path，如果没有则尝试从task中获取
-                    image_path = item.get('image_path') if isinstance(item, dict) else None
+                    image_path = (
+                        item.get("image_path") if isinstance(item, dict) else None
+                    )
                     if not image_path:
-                        image_path = task.get('image_path', '')
+                        image_path = task.get("image_path", "")
 
-                    result.append({
-                        "save_path": path,
-                        "folder_name": task.get('name'),
-                        "file_name": video['name'],
-                        "image_path": image_path
-                    })
+                    result.append(
+                        {
+                            "save_path": path,
+                            "folder_name": task.get("name"),
+                            "file_name": video["name"],
+                            "image_path": image_path,
+                        }
+                    )
                     break
         return result
-                
-
 
     def create_dir_recursive(self, path: str) -> dict[str, Any] | None:
         """递归创建目录"""
@@ -1407,13 +1509,13 @@ class OpenAPI_115:
         if res:
             init.logger.info(f"[{path}]目录已存在！")
             return res
-        
-        path_list = get_parent_paths(path) 
+
+        path_list = get_parent_paths(path)
         # get_parent_paths 返回如 ['/AV', '/AV/涩花', '/AV/涩花/亚洲无码原创', ...]
-        
+
         last_path = ""
         final_info = None
-        
+
         for index, item in enumerate(path_list):
             # 同样清除沿途路径缓存
             if item in self.file_info_cache:
@@ -1429,69 +1531,78 @@ class OpenAPI_115:
                 if index > 0:
                     # 需要父目录ID
                     if not final_info:
-                         # 尝试重新获取 last_path 信息
-                         final_info = self.get_file_info(last_path)
-                    
+                        # 尝试重新获取 last_path 信息
+                        final_info = self.get_file_info(last_path)
+
                     if final_info:
-                        parent_id = final_info.get('file_id') or final_info.get('cid')
+                        parent_id = final_info.get("file_id") or final_info.get("cid")
                     else:
                         init.logger.error(f"无法获取父目录信息: {last_path}")
                         return None
-                
+
                 # 解析目录名
                 name = os.path.basename(item)
-                if index == 0 and item.startswith("/") and not name: 
+                if index == 0 and item.startswith("/") and not name:
                     # item 可能就是 "/" 或者 "/foo"
                     # 这里假设 path_list 里的 item 都是完整路径
                     pass
-                if not name and index == 0: # 处理特殊情况
-                     name = item.strip("/")
-                
+                if not name and index == 0:  # 处理特殊情况
+                    name = item.strip("/")
+
                 created_res = self.create_directory(parent_id, name)
-                
+
                 current_info = None
-                
+
                 if isinstance(created_res, dict):
                     current_info = created_res
-                    if 'file_id' not in current_info and 'cid' in current_info:
-                        current_info['file_id'] = current_info['cid']
+                    if "file_id" not in current_info and "cid" in current_info:
+                        current_info["file_id"] = current_info["cid"]
                 elif created_res is True:
                     # 目录已存在 (code 20004)，但 get_file_info 没查到
-                    init.logger.info(f"目录已存在但未获取到信息，尝试从父目录列表查找: {item}")
+                    init.logger.info(
+                        f"目录已存在但未获取到信息，尝试从父目录列表查找: {item}"
+                    )
                     try:
-                        file_list_data = self.get_file_list({'cid': parent_id, 'limit': 1000})
+                        file_list_data = self.get_file_list(
+                            {"cid": parent_id, "limit": 1000}
+                        )
                         file_list = []
                         if isinstance(file_list_data, list):
                             file_list = file_list_data
                         elif isinstance(file_list_data, dict):
-                            file_list = file_list_data.get('list', []) or file_list_data.get('data', [])
-                        
+                            file_list = file_list_data.get(
+                                "list", []
+                            ) or file_list_data.get("data", [])
+
                         for f in file_list:
-                            fname = f.get('n') or f.get('file_name') or f.get('name')
+                            fname = f.get("n") or f.get("file_name") or f.get("name")
                             if fname == name:
                                 current_info = f
-                                if 'file_id' not in current_info:
-                                    current_info['file_id'] = current_info.get('cid') or current_info.get('fid')
+                                if "file_id" not in current_info:
+                                    current_info["file_id"] = current_info.get(
+                                        "cid"
+                                    ) or current_info.get("fid")
                                 break
                     except Exception as e:
                         init.logger.warn(f"从父目录查找失败: {e}")
-                
+
                 if current_info:
                     final_info = current_info
                     # 关键：更新缓存！
                     self.file_info_cache[item] = final_info
                     last_path = item
-                    init.logger.info(f"目录[{item}]检查/创建/获取成功, ID: {final_info.get('file_id')}")
+                    init.logger.info(
+                        f"目录[{item}]检查/创建/获取成功, ID: {final_info.get('file_id')}"
+                    )
                 else:
                     init.logger.error(f"创建目录后无法获取其信息: {item}")
                     return None
-                    
+
                 time.sleep(1)
-                    
+
         init.logger.info(f"目录[{path}]处理完成！")
         return final_info
-        
-    
+
     def check_risk(self) -> bool:
         self.request_count += 1
         if self.lifetime_vip:
@@ -1499,40 +1610,44 @@ class OpenAPI_115:
         else:
             request_risk_value = 10000 * RISK_THRESHOLD
         if self.request_count >= request_risk_value:
-            init.logger.warn("今日请求次数即将达到风险阈值，自动停止所有115请求，以免被风控...")
+            init.logger.warn(
+                "今日请求次数即将达到风险阈值，自动停止所有115请求，以免被风控..."
+            )
             return True
         return False
 
-        
-            
     @staticmethod
-    def save_token_to_file(access_token: str, refresh_token: str, file_path: str) -> None:
+    def save_token_to_file(
+        access_token: str, refresh_token: str, file_path: str
+    ) -> None:
         """将access_token和refresh_token保存到文件"""
-        with open(file_path, 'w', encoding='utf-8') as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             json.dump({"access_token": access_token, "refresh_token": refresh_token}, f)
         init.logger.info(f"Tokens saved to {file_path}")
-        
+
     @staticmethod
     def get_challenge() -> tuple[str, str]:
         # 生成随机字节（避免直接使用 ASCII 字符以确保安全随机性）
         random_bytes = os.urandom(64)
         # 转换为 URL-safe Base64，并移除填充字符（=）
-        verifier = base64.urlsafe_b64encode(random_bytes).rstrip(b'=').decode('utf-8')
+        verifier = base64.urlsafe_b64encode(random_bytes).rstrip(b"=").decode("utf-8")
         # 确保符合规范（虽然 urlsafe_b64encode 已满足要求，此处做二次验证）
-        verifier = re.sub(r'[^A-Za-z0-9\-._~]', '', verifier)[:64]  # 限制长度为64字符
-        sha256_hash = hashlib.sha256(verifier.encode('utf-8')).digest()
+        verifier = re.sub(r"[^A-Za-z0-9\-._~]", "", verifier)[:64]  # 限制长度为64字符
+        sha256_hash = hashlib.sha256(verifier.encode("utf-8")).digest()
         # Base64 URL 安全编码并移除填充字符
-        challenge = base64.urlsafe_b64encode(sha256_hash).rstrip(b'=').decode('utf-8')
+        challenge = base64.urlsafe_b64encode(sha256_hash).rstrip(b"=").decode("utf-8")
         return verifier, challenge
-    
+
+
 def file_sha1(file_path: str) -> str:
-    with open(file_path, 'rb') as f:
+    with open(file_path, "rb") as f:
         return hashlib.sha1(f.read()).hexdigest()
-    
+
+
 def sha1_digest(file_path: str) -> str:
     h = hashlib.sha1()
-    with Path(file_path).open('rb') as f:
-        for chunk in iter(lambda: f.read(128), b''):
+    with Path(file_path).open("rb") as f:
+        for chunk in iter(lambda: f.read(128), b""):
             h.update(chunk)
             break
     return h.hexdigest()
@@ -1542,7 +1657,7 @@ def calculate_sha1(file_path: str) -> str | None:
     """计算文件的SHA1哈希值"""
     sha1 = hashlib.sha1()
     try:
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             while True:
                 chunk = f.read(8192)
                 if not chunk:
@@ -1552,7 +1667,8 @@ def calculate_sha1(file_path: str) -> str | None:
     except FileNotFoundError:
         init.logger.error(f"错误：文件未找到 -> {file_path}")
         return None
-    
+
+
 def file_sha1_by_range(file_path: str, start: int, end: int) -> str:
     """计算文件从start到end（含end）的SHA1"""
     size = end - start + 1
@@ -1572,23 +1688,24 @@ def get_parent_paths(path: str) -> list[str]:
     """
     # 规范化路径（处理多余的斜杠等问题）
     normalized_path = os.path.normpath(path)
-    
+
     # 分割路径
     parts = normalized_path.split(os.sep)
-    
+
     # 处理Unix系统的根目录情况
-    if parts[0] == '':
+    if parts[0] == "":
         parts[0] = os.sep
-    
+
     # 逐步构建路径
     result = []
     current_path = parts[0] if parts[0] == os.sep else ""
-    
+
     for part in parts[1:]:
         current_path = os.path.join(current_path, part)
         result.append(current_path)
-    
+
     return result
+
 
 if __name__ == "__main__":
     init.init_log()
@@ -1647,4 +1764,3 @@ if __name__ == "__main__":
     # welcome_text = app.welcome_message()
     # init.logger.info(welcome_text)
     # app.clear_cloud_task()  # 清理云端任务
-

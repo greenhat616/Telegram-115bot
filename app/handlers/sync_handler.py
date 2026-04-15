@@ -2,16 +2,29 @@
 from typing import Any
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, CommandHandler, ConversationHandler, CallbackQueryHandler
+from telegram.ext import (
+    ContextTypes,
+    CommandHandler,
+    ConversationHandler,
+    CallbackQueryHandler,
+)
 from app import init
-from app.utils.ptb_helpers import require_message, require_query, require_chat, require_user, require_user_data
+from app.utils.ptb_helpers import (
+    require_message,
+    require_query,
+    require_chat,
+    require_user,
+    require_user_data,
+)
 import asyncio
 import shutil
 from pathlib import Path
 from warnings import filterwarnings
 from telegram.warnings import PTBUserWarning
 
-filterwarnings(action="ignore", message=r".*CallbackQueryHandler", category=PTBUserWarning)
+filterwarnings(
+    action="ignore", message=r".*CallbackQueryHandler", category=PTBUserWarning
+)
 
 
 SELECT_MAIN_CATEGORY_SYNC, SELECT_SUB_CATEGORY_SYNC = range(30, 32)
@@ -25,14 +38,21 @@ async def sync_strm_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 显示主分类（电影/剧集）
     keyboard = [
-        [InlineKeyboardButton(f"📁 {category.display_name}", callback_data=category.name)] for category in
-        init.require_bot_config().category_folder
+        [
+            InlineKeyboardButton(
+                f"📁 {category.display_name}", callback_data=category.name
+            )
+        ]
+        for category in init.require_bot_config().category_folder
     ]
     # 添加退出按钮
     keyboard.append([InlineKeyboardButton("退出", callback_data="quit")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await context.bot.send_message(chat_id=require_chat(update).id, text="❓请选择要同步的分类：",
-                                   reply_markup=reply_markup)
+    await context.bot.send_message(
+        chat_id=require_chat(update).id,
+        text="❓请选择要同步的分类：",
+        reply_markup=reply_markup,
+    )
     return SELECT_MAIN_CATEGORY_SYNC
 
 
@@ -45,14 +65,20 @@ async def select_main_category_sync(update: Update, context: ContextTypes.DEFAUL
     if selected_main_category == "return":
         # 显示主分类
         keyboard = [
-            [InlineKeyboardButton(f"📁 {category.display_name}", callback_data=category.name)]
+            [
+                InlineKeyboardButton(
+                    f"📁 {category.display_name}", callback_data=category.name
+                )
+            ]
             for category in init.require_bot_config().category_folder
         ]
         keyboard.append([InlineKeyboardButton("退出", callback_data="quit")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await context.bot.send_message(chat_id=require_chat(update).id,
-                                       text="❓请选择要同步的分类：",
-                                       reply_markup=reply_markup)
+        await context.bot.send_message(
+            chat_id=require_chat(update).id,
+            text="❓请选择要同步的分类：",
+            reply_markup=reply_markup,
+        )
         return SELECT_MAIN_CATEGORY_SYNC
     elif selected_main_category == "quit":
         # 直接退出会话
@@ -60,18 +86,23 @@ async def select_main_category_sync(update: Update, context: ContextTypes.DEFAUL
     else:
         require_user_data(context)["selected_main_category"] = selected_main_category
         sub_categories = [
-            item.path_map for item in init.require_bot_config().category_folder if item.name == selected_main_category
+            item.path_map
+            for item in init.require_bot_config().category_folder
+            if item.name == selected_main_category
         ][0]
 
         # 创建子分类按钮
         keyboard = [
-            [InlineKeyboardButton(f"📁 {category.name}", callback_data=category.path)] for category in sub_categories
+            [InlineKeyboardButton(f"📁 {category.name}", callback_data=category.path)]
+            for category in sub_categories
         ]
         keyboard.append([InlineKeyboardButton("退出", callback_data="quit")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("❓请选择要同步的目录：", reply_markup=reply_markup)
+        await query.edit_message_text(
+            "❓请选择要同步的目录：", reply_markup=reply_markup
+        )
         return SELECT_SUB_CATEGORY_SYNC
-    
+
 
 async def select_sub_category_sync(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = require_query(update)
@@ -95,9 +126,13 @@ async def select_sub_category_sync(update: Update, context: ContextTypes.DEFAULT
         if sync_path.exists() and sync_path.is_dir():
             shutil.rmtree(str(sync_path))
 
-        await query.edit_message_text(text=f"🔄[{selected_path}]正在同步strm文件，请稍后...")
+        await query.edit_message_text(
+            text=f"🔄[{selected_path}]正在同步strm文件，请稍后..."
+        )
         # 获取视频文件列表（移至线程池避免阻塞主事件循环）
-        video_files = await asyncio.to_thread(init.require_openapi_115().get_sync_dir, selected_path)
+        video_files = await asyncio.to_thread(
+            init.require_openapi_115().get_sync_dir, selected_path
+        )
         for file in video_files:
             try:
                 # file = "FC2-PPV-4750727/hhd800.com@FC2-PPV-4750727.mp4"
@@ -119,8 +154,8 @@ async def select_sub_category_sync(update: Update, context: ContextTypes.DEFAULT
                         movie_dir.mkdir(parents=True, exist_ok=True)
                     strm_file = movie_dir / (Path(file).stem + ".strm")
                     strm_content = f"{openlist_root}/{file_path.relative_to('/')}"
-                
-                with open(strm_file, 'w') as f:
+
+                with open(strm_file, "w") as f:
                     f.write(strm_content)
                 init.logger.info(f"成功创建 strm 文件: {strm_file}")
             except Exception as file_error:
@@ -131,20 +166,23 @@ async def select_sub_category_sync(update: Update, context: ContextTypes.DEFAULT
     except Exception as e:
         await query.edit_message_text(text=f"❌ 同步strm文件失败：{str(e)}！")
         return ConversationHandler.END
-    
+
 
 async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 检查是否是回调查询
     if update.callback_query:
         await update.callback_query.edit_message_text(text="🚪用户退出本次会话")
     else:
-        await context.bot.send_message(chat_id=require_chat(update).id, text="🚪用户退出本次会话")
+        await context.bot.send_message(
+            chat_id=require_chat(update).id, text="🚪用户退出本次会话"
+        )
     return ConversationHandler.END
+
 
 def create_movie_directory(sync_path: Path, movie_path: str) -> Path:
     if movie_path.startswith("/"):
         movie_path = movie_path[1:]
-    
+
     parts = Path(movie_path).parts
     if len(parts) < 2:
         return sync_path
@@ -165,7 +203,9 @@ def register_sync_handlers(application: Any) -> None:
     sync_handler = ConversationHandler(
         entry_points=[CommandHandler("sync", sync_strm_files)],  # ty:ignore[invalid-argument-type]
         states={
-            SELECT_MAIN_CATEGORY_SYNC: [CallbackQueryHandler(select_main_category_sync)],
+            SELECT_MAIN_CATEGORY_SYNC: [
+                CallbackQueryHandler(select_main_category_sync)
+            ],
             SELECT_SUB_CATEGORY_SYNC: [CallbackQueryHandler(select_sub_category_sync)],
         },  # ty:ignore[invalid-argument-type]
         fallbacks=[CommandHandler("q", quit_conversation)],  # ty:ignore[invalid-argument-type]

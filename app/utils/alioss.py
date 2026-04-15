@@ -16,22 +16,22 @@ def upload_file_to_oss(**kwargs: Any) -> bool:
     :param endpoint: 自定义endpoint
     :param callback: 回调参数
     """
-    file_path = kwargs.get('file_path', '')
-    region = kwargs.get('region', 'cn-shenzhen')  # 默认深圳区域
-    bucket = kwargs.get('bucket', '')
-    endpoint = kwargs.get('endpoint', '')
-    key = kwargs.get('key', '')
-    access_key_id = kwargs.get('access_key_id', '')
-    access_key_secret = kwargs.get('access_key_secret', '')
-    security_token = kwargs.get('security_token', '')
-    callback = kwargs.get('callback', None)
-    callback_var = kwargs.get('callback_var', None)
+    file_path = kwargs.get("file_path", "")
+    region = kwargs.get("region", "cn-shenzhen")  # 默认深圳区域
+    bucket = kwargs.get("bucket", "")
+    endpoint = kwargs.get("endpoint", "")
+    key = kwargs.get("key", "")
+    access_key_id = kwargs.get("access_key_id", "")
+    access_key_secret = kwargs.get("access_key_secret", "")
+    security_token = kwargs.get("security_token", "")
+    callback = kwargs.get("callback", None)
+    callback_var = kwargs.get("callback_var", None)
     try:
         # 直接使用StaticCredentialsProvider，不需要先创建Credentials对象
         credentials_provider = oss.credentials.StaticCredentialsProvider(
             access_key_id=access_key_id,
             access_key_secret=access_key_secret,
-            security_token=security_token
+            security_token=security_token,
         )
         # 加载SDK的默认配置，并设置凭证提供者
         cfg = oss.config.load_default()
@@ -52,11 +52,11 @@ def upload_file_to_oss(**kwargs: Any) -> bool:
         result = client.put_object_from_file(
             oss.PutObjectRequest(
                 bucket=bucket,  # 存储空间名称
-                key=key,         # 对象名称
-                callback=callback,   # 回调参数
-                callback_var=callback_var
+                key=key,  # 对象名称
+                callback=callback,  # 回调参数
+                callback_var=callback_var,
             ),
-            file_path
+            file_path,
         )
         if result.status_code == 200:
             return True

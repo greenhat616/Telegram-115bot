@@ -15,8 +15,6 @@
 # SUBSCRIBE, SUBSCRIBE_OPERATE, ADD_SUBSCRIBE, VIEW_SUBSCRIBE, DEL_SUBSCRIBE = range(40, 45)
 
 
-
-
 # async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
 #     usr_id = update.message.from_user.id
 #     if not init.check_user(usr_id):
@@ -42,10 +40,10 @@
 #     if operate == "add_subscribe":
 #         await context.bot.send_message(chat_id=update.effective_chat.id, text="💡女优名称请与JavDb保持一致")
 #         return ADD_SUBSCRIBE
-    
+
 #     if operate == "view_subscribe":
 #         return await view_subscribe(update, context)
-    
+
 #     if operate == "del_subscribe":
 #         actor_list = get_actors()
 #         subscribe_text = ""
@@ -60,15 +58,15 @@
 #         if actor_list:
 #             await context.bot.send_message(chat_id=update.effective_chat.id, text="💡 请输入要删除的ID")
 #             return DEL_SUBSCRIBE
-        
+
 #     if operate == "clear_subscribe":
 #         clear_subscribe()
 #         await context.bot.send_message(chat_id=update.effective_chat.id, text="✅ 订阅列表已清空")
 #         return SUBSCRIBE_OPERATE
-    
+
 #     if operate == "quit":
 #         return await quit_conversation(update, context)
-    
+
 #     return SUBSCRIBE_OPERATE
 
 

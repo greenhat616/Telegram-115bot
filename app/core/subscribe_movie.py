@@ -21,43 +21,40 @@ def get_tmdb_id(movie_name: str, page: int = 1) -> str | None:
     base_url = "https://www.themoviedb.org"
     search_url = f"{base_url}/search/movie?query={movie_name}&page={page}"
 
-    headers = {
-        "user-agent": init.USER_AGENT,
-        "accept-language": "zh-CN"
-    }
+    headers = {"user-agent": init.USER_AGENT, "accept-language": "zh-CN"}
     init.logger.info(f"正在从TMDB[第{page}]页搜索电影: {movie_name}")
     tmdb_id = 0
     try:
         response = http_request("GET", search_url, headers=headers, timeout=30)
         soup = BeautifulSoup(response.text, features="html.parser")
-        tags_p = soup.find_all('p')
+        tags_p = soup.find_all("p")
         for tag in tags_p:
             if "找不到和您的查询相符的电影" in tag.text:
                 init.logger.info(f"TMDB未找到匹配电影: {movie_name}")
                 return None
-        all_movie_links = soup.find_all('a', class_='result')
+        all_movie_links = soup.find_all("a", class_="result")
         for link in all_movie_links:
             # 提取电影ID
-            href = link.get('href', '')
-            movie_id = href.split('/')[-1].split('-')[0] if href else 'N/A'  # ty:ignore[unresolved-attribute]
-            
+            href = link.get("href", "")
+            movie_id = href.split("/")[-1].split("-")[0] if href else "N/A"  # ty:ignore[unresolved-attribute]
+
             # 提取中文标题
-            h2_tag = link.find('h2')
-            chinese_title = 'N/A'
+            h2_tag = link.find("h2")
+            chinese_title = "N/A"
             if h2_tag:
                 # 获取h2的所有文本，然后去掉英文标题部分
                 full_text = h2_tag.get_text(strip=True)
                 # 找到英文标题的起始位置（如果有的话）
-                if '(' in full_text:
-                    chinese_title = full_text.split('(')[0].strip()
+                if "(" in full_text:
+                    chinese_title = full_text.split("(")[0].strip()
                 else:
                     chinese_title = full_text
-            
+
             # 提取英文标题
-            english_title_span = link.find('span', class_='title')
-            english_title = 'N/A'
+            english_title_span = link.find("span", class_="title")
+            english_title = "N/A"
             if english_title_span:
-                english_title = english_title_span.get_text(strip=True).strip('()')
+                english_title = english_title_span.get_text(strip=True).strip("()")
             if chinese_title == movie_name or english_title == movie_name:
                 tmdb_id = movie_id
                 title = f"{chinese_title} ({english_title})"
@@ -69,7 +66,7 @@ def get_tmdb_id(movie_name: str, page: int = 1) -> str | None:
     except Exception as e:
         init.logger.error(f"从TMDB获取电影ID失败: {e}")
         return None
-    
+
 
 def schedule_movie() -> None:
     with SqlLiteLib() as sqlite:
@@ -81,7 +78,9 @@ def schedule_movie() -> None:
                 tmdb_id, movie_name, category_folder = row
                 download_url = search_update(tmdb_id)
                 if download_url:
-                    init.logger.info(f"电影[{movie_name}]已发布，下载链接为[{download_url}], 正在添加到离线下载...")
+                    init.logger.info(
+                        f"电影[{movie_name}]已发布，下载链接为[{download_url}], 正在添加到离线下载..."
+                    )
                     # 添加到离线下载
                     if download_from_link(download_url, movie_name, category_folder):
                         # 更新下载状态
@@ -93,8 +92,8 @@ def schedule_movie() -> None:
         except Exception as e:
             init.logger.error(f"执行电影定时更新任务失败: {str(e)}")
             return
-        
-        
+
+
 def search_update(tmdb_id: str) -> str | None:
     # 优先ed2k
     url = f"https://api.nullbr.eu.org/movie/{tmdb_id}/ed2k"
@@ -103,7 +102,7 @@ def search_update(tmdb_id: str) -> str | None:
     if highest_score_item:
         # 更新数据库
         update_sub_movie(tmdb_id, highest_score_item)
-        return highest_score_item['download_url']
+        return highest_score_item["download_url"]
     # 找不到ed2k就找磁力
     url = f"https://api.nullbr.eu.org/movie/{tmdb_id}/magnet"
     res = get_response_from_api(url)
@@ -111,7 +110,7 @@ def search_update(tmdb_id: str) -> str | None:
     if highest_score_item:
         # 更新数据库
         update_sub_movie(tmdb_id, highest_score_item)
-        return highest_score_item['download_url']
+        return highest_score_item["download_url"]
     return None
 
 
@@ -120,10 +119,15 @@ def update_sub_movie(tmdb_id: str, highest_score_item: dict[str, str]) -> None:
     post_url = get_movie_cover(movie_name or "")
     with SqlLiteLib() as sqlite:
         sql = "update sub_movie set download_url=?, post_url=?, size=? where is_delete = 0 and tmdb_id=?"
-        params = (highest_score_item['download_url'], post_url, highest_score_item['size'], tmdb_id)
+        params = (
+            highest_score_item["download_url"],
+            post_url,
+            highest_score_item["size"],
+            tmdb_id,
+        )
         sqlite.execute_sql(sql, params)
-        
-        
+
+
 def get_moive_name(tmdb_id: str) -> str | None:
     with SqlLiteLib() as sqlite:
         sql = "select movie_name from sub_movie where is_delete = 0 and tmdb_id=?"
@@ -134,18 +138,21 @@ def get_moive_name(tmdb_id: str) -> str | None:
         else:
             return None
 
-def check_condition(res: dict[str, list[dict[str, Any]]], key: str) -> dict[str, Any] | None:
+
+def check_condition(
+    res: dict[str, list[dict[str, Any]]], key: str
+) -> dict[str, Any] | None:
     config = init.require_bot_config()
     download_url = ""
     res_list = []
     for item in res[key]:
         score = 0
-        movie_name = item['name']
-        zh_sub = item['zh_sub']
-        resolution = item['resolution']
+        movie_name = item["name"]
+        zh_sub = item["zh_sub"]
+        resolution = item["resolution"]
         download_url = item[key]
-        size = item['size']
-        quality = item['quality']
+        size = item["size"]
+        quality = item["quality"]
         is_dolby_vision = False
         if quality:
             if isinstance(quality, list):
@@ -157,26 +164,39 @@ def check_condition(res: dict[str, list[dict[str, Any]]], key: str) -> dict[str,
         if config.sub_condition.dolby_vision and is_dolby_vision:
             score += 10
         if zh_sub == 1:
-             score += 10
-        for index, cfg_resolution in enumerate(config.sub_condition.resolution_priority, 0):
+            score += 10
+        for index, cfg_resolution in enumerate(
+            config.sub_condition.resolution_priority, 0
+        ):
             if resolution:
-                if str(cfg_resolution) in resolution or str(cfg_resolution) in movie_name:
+                if (
+                    str(cfg_resolution) in resolution
+                    or str(cfg_resolution) in movie_name
+                ):
                     score += len(config.sub_condition.resolution_priority) - index
             else:
                 if str(cfg_resolution) in movie_name:
                     score += len(config.sub_condition.resolution_priority) - index
-        res_list.append({'score': score, 'download_url': download_url, 'size': size, 'zh_sub': zh_sub, 'is_dolby_vision': is_dolby_vision})
+        res_list.append(
+            {
+                "score": score,
+                "download_url": download_url,
+                "size": size,
+                "zh_sub": zh_sub,
+                "is_dolby_vision": is_dolby_vision,
+            }
+        )
     if res_list:
         # 按分数从高到低排序
-        sorted_res_list = sorted(res_list, key=lambda x: x['score'], reverse=True)
+        sorted_res_list = sorted(res_list, key=lambda x: x["score"], reverse=True)
         highest_score_item = None
         for item in sorted_res_list:
             if config.sub_condition.dolby_vision:
                 # 必须同时满足杜比卫视和中字
-                if item['zh_sub'] == 0 or item['is_dolby_vision'] == False:
+                if item["zh_sub"] == 0 or item["is_dolby_vision"] == False:
                     continue
             else:
-                if item['zh_sub'] == 0 or item['is_dolby_vision'] == True:
+                if item["zh_sub"] == 0 or item["is_dolby_vision"] == True:
                     continue
             highest_score_item = item
             break
@@ -188,13 +208,15 @@ def get_response_from_api(url: str) -> Any:
     headers = {
         "User-Agent": init.USER_AGENT,
         "X-APP-ID": init.require_bot_config().x_app_id,
-        "X-API-KEY": init.require_bot_config().x_api_key
+        "X-API-KEY": init.require_bot_config().x_api_key,
     }
     response = http_request("GET", url, headers=headers, timeout=(5, 30))
     return response.json()
 
 
-def download_from_link(download_url: str, movie_name: str, save_path: str) -> bool | None:
+def download_from_link(
+    download_url: str, movie_name: str, save_path: str
+) -> bool | None:
     info_hash = ""
     api = init.require_openapi_115()
     try:
@@ -204,7 +226,9 @@ def download_from_link(download_url: str, movie_name: str, save_path: str) -> bo
             init.logger.error(f"❌ 离线遇到错误！")
         else:
             init.logger.info(f"✅ [`{download_url}`]添加离线成功")
-            download_success, resource_name, info_hash = api.check_offline_download_success(download_url)
+            download_success, resource_name, info_hash = (
+                api.check_offline_download_success(download_url)
+            )
             if download_success:
                 init.logger.info(f"✅ [{resource_name}]离线下载完成")
                 time.sleep(1)
@@ -217,7 +241,9 @@ def download_from_link(download_url: str, movie_name: str, save_path: str) -> bo
                     # 创建文件夹
                     api.create_dir_for_file(f"{save_path}", movie_name)
                     # 移动文件到电影文件夹
-                    api.move_file(f"{save_path}/{resource_name}", f"{save_path}/{movie_name}")
+                    api.move_file(
+                        f"{save_path}/{resource_name}", f"{save_path}/{movie_name}"
+                    )
 
                 # 读取目录下所有文件
                 file_list = api.get_files_from_dir(f"{save_path}/{movie_name}")
@@ -233,14 +259,17 @@ def download_from_link(download_url: str, movie_name: str, save_path: str) -> bo
                 return False
     except Exception as e:
         init.logger.error(f"💀下载遇到错误: {str(e)}")
-        add_task_to_queue(init.require_bot_config().allowed_user, f"{init.IMAGE_PATH}/male023.png",
-                            message=f"❌ 下载任务执行出错: {escape_markdown(str(e), version=2)}")
+        add_task_to_queue(
+            init.require_bot_config().allowed_user,
+            f"{init.IMAGE_PATH}/male023.png",
+            message=f"❌ 下载任务执行出错: {escape_markdown(str(e), version=2)}",
+        )
         return False
     finally:
         # 清除云端任务，避免重复下载
         api.del_offline_task(info_hash, del_source_file=0)
-    
-    
+
+
 def send_message2usr(tmdb_id: str, sqlite: SqlLiteLib) -> None:
     try:
         query = "select sub_user,download_url,size,movie_name,post_url,category_folder from sub_movie where is_delete = 0 and tmdb_id=?"
@@ -265,8 +294,8 @@ def send_message2usr(tmdb_id: str, sqlite: SqlLiteLib) -> None:
 
     except Exception as e:
         init.logger.error(f"电影[{movie_name}] 添加到队列失败: {e}")
-    
-    
+
+
 def is_subscribe(movie_name: str) -> bool | None:
     tmdb_id = get_tmdb_id(movie_name)
     if tmdb_id:
@@ -279,22 +308,31 @@ def is_subscribe(movie_name: str) -> bool | None:
             else:
                 return False
 
+
 def update_subscribe(movie_name: str, post_url: str, download_url: str) -> None:
     tmdb_id = get_tmdb_id(movie_name)
     if tmdb_id:
         with SqlLiteLib() as sqlite:
-            select_sql = "SELECT is_download FROM sub_movie WHERE is_delete = 0 and tmdb_id = ?"
+            select_sql = (
+                "SELECT is_download FROM sub_movie WHERE is_delete = 0 and tmdb_id = ?"
+            )
             is_download = sqlite.query_one(select_sql, (tmdb_id,))
             if is_download == 1:
                 init.logger.info(f"订阅影片[{movie_name}]已完成下载，无需再次更新!")
                 return
             update_download_sql = "UPDATE sub_movie SET is_download = 1, post_url = ?, download_url = ? WHERE is_delete = 0 and tmdb_id = ?"
-            sqlite.execute_sql(update_download_sql, (post_url, download_url, tmdb_id,))
+            sqlite.execute_sql(
+                update_download_sql,
+                (
+                    post_url,
+                    download_url,
+                    tmdb_id,
+                ),
+            )
             init.logger.info(f"订阅影片[{movie_name}]已手动完成下载!")
-            
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     init.load_yaml_config()
     init.init_log()
     # schedule_movie()

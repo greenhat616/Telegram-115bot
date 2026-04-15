@@ -30,6 +30,7 @@ def get_version(md_format: bool = False) -> str:
         return escape_markdown(version, version=2)
     return version
 
+
 def get_help_info() -> str:
     version = get_version()
     help_info = f"""
@@ -81,10 +82,17 @@ def get_help_info() -> str:
 """
     return help_info
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     help_info = get_help_info()
     assert update.effective_chat is not None
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=help_info, parse_mode="html", disable_web_page_preview=True)
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=help_info,
+        parse_mode="html",
+        disable_web_page_preview=True,
+    )
+
 
 async def reload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     init.load_yaml_config()
@@ -92,7 +100,10 @@ async def reload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     init.logger.info("Reload configuration success:")
     init.logger.info(config.model_dump_json())
     assert update.effective_chat is not None
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="🔁重载配置完成！", parse_mode="html")
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id, text="🔁重载配置完成！", parse_mode="html"
+    )
+
 
 def start_async_loop() -> None:
     """启动异步事件循环的线程"""
@@ -109,11 +120,12 @@ def start_async_loop() -> None:
         loop.close()
         init.logger.info("事件循环已关闭")
 
+
 def send_start_message() -> None:
-    version = get_version()  
+    version = get_version()
     if init.openapi_115 is None:
         return
-    
+
     line1, line2, line3, line4 = init.openapi_115.welcome_message()
     if not line1:
         return
@@ -128,25 +140,27 @@ def send_start_message() -> None:
 {line5}
 
 发送 `/start` 查看操作说明"""
-        
+
         config = init.require_bot_config()
         add_task_to_queue(
             config.allowed_user,
             f"{init.IMAGE_PATH}/neuter010.png",
-            message=formatted_message
+            message=formatted_message,
         )
 
 
 def update_logger_level() -> None:
     import logging
-    logging.getLogger('httpx').setLevel(logging.WARNING)
-    logging.getLogger('telegram').setLevel(logging.WARNING)
-    logging.getLogger('telegram.ext.Application').setLevel(logging.WARNING)
-    logging.getLogger('telegram.ext.Updater').setLevel(logging.WARNING)
-    logging.getLogger('telegram.Bot').setLevel(logging.WARNING)
-    
+
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("telegram").setLevel(logging.WARNING)
+    logging.getLogger("telegram.ext.Application").setLevel(logging.WARNING)
+    logging.getLogger("telegram.ext.Updater").setLevel(logging.WARNING)
+    logging.getLogger("telegram.Bot").setLevel(logging.WARNING)
+
+
 def get_bot_menu() -> list[BotCommand]:
-    return  [
+    return [
         BotCommand("start", "获取帮助信息"),
         BotCommand("auth", "115扫码授权"),
         BotCommand("reload", "重载配置"),
@@ -157,8 +171,9 @@ def get_bot_menu() -> list[BotCommand]:
         BotCommand("rss", "RSS订阅"),
         BotCommand("sm", "订阅电影"),
         BotCommand("sync", "同步指定目录，并创建软链"),
-        BotCommand("q", "退出当前会话")]
-    
+        BotCommand("q", "退出当前会话"),
+    ]
+
 
 async def set_bot_menu(application: Application) -> None:
     """异步设置Bot菜单"""
@@ -168,20 +183,25 @@ async def set_bot_menu(application: Application) -> None:
     except Exception as e:
         init.logger.error(f"设置Bot菜单失败: {e}")
 
+
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """全局异常处理器，防止未捕获异常导致 polling 静默停止"""
     import traceback
+
     error_details = traceback.format_exc()
-    init.logger.error(f"Unhandled exception in handler: {context.error}\n{error_details}")
+    init.logger.error(
+        f"Unhandled exception in handler: {context.error}\n{error_details}"
+    )
     # 尝试通知用户
     try:
         if isinstance(update, Update) and update.effective_chat:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text=f"⚠️ 处理请求时发生内部错误，请稍后重试。"
+                text=f"⚠️ 处理请求时发生内部错误，请稍后重试。",
             )
     except Exception:
         pass
+
 
 async def post_init(application: Application) -> None:
     """应用初始化后的回调"""
@@ -195,6 +215,7 @@ def main() -> None:
     message_thread.start()
     # 等待消息队列准备就绪
     import app.utils.message_queue as message_queue
+
     max_wait = 30  # 最多等待30秒
     wait_count = 0
     while True:
@@ -217,10 +238,10 @@ def main() -> None:
     application.add_error_handler(error_handler)
 
     # 启动帮助
-    start_handler = CommandHandler('start', start)
+    start_handler = CommandHandler("start", start)
     application.add_handler(start_handler)
     # 重载配置
-    reload_handler = CommandHandler('reload', reload)
+    reload_handler = CommandHandler("reload", reload)
     application.add_handler(reload_handler)
 
     # 初始化115open对象
@@ -229,14 +250,13 @@ def main() -> None:
         add_task_to_queue(
             config.allowed_user,
             f"{init.IMAGE_PATH}/male023.png",
-            message="❌ 115 OpenAPI客户端初始化失败，程序无法继续运行！\n请检查Token或115 AppID设置是否正确！"
+            message="❌ 115 OpenAPI客户端初始化失败，程序无法继续运行！\n请检查Token或115 AppID设置是否正确！",
         )
         # 等待消息队列处理完毕再退出
         while not message_queue.message_queue.empty():
             time.sleep(5)
         time.sleep(30)
         exit(1)
-
 
     # 注册Auth
     register_auth_handlers(application)
@@ -275,11 +295,12 @@ def main() -> None:
         init.logger.info("程序正在退出。")
     except Exception as e:
         import traceback
+
         error_details = traceback.format_exc()  # 获取完整的异常堆栈信息
         init.logger.error(f"程序遇到错误：{str(e)}\n{error_details}")
     finally:
         init.logger.info("机器人已停止运行。")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -64,11 +64,13 @@ CONFIG = "/config"
 TEMP = "/tmp"
 IMAGE_PATH = "/app/images"
 
+
 def require_bot_config() -> BotConfig:
     """获取已初始化的 BotConfig，未初始化时抛出 RuntimeError"""
     if bot_config is None:
         raise RuntimeError("bot_config must be initialized before use")
     return bot_config
+
 
 def require_openapi_115() -> OpenAPI_115:
     """获取已初始化的 OpenAPI_115，未初始化时抛出 RuntimeError"""
@@ -81,19 +83,27 @@ def _get_system_chrome_version() -> str:
     """获取系统安装的 Chrome/Chromium 版本"""
     try:
         # 1. 尝试获取 google-chrome-stable 版本
-        res = subprocess.run(['google-chrome-stable', '--version'], capture_output=True, text=True, check=False)
+        res = subprocess.run(
+            ["google-chrome-stable", "--version"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         if res.returncode == 0:
-             # Output: "Google Chrome 121.0.6167.85"
+            # Output: "Google Chrome 121.0.6167.85"
             return res.stdout.strip().split()[-1]
-            
+
         # 2. 尝试获取 chromium 版本
-        res = subprocess.run(['chromium', '--version'], capture_output=True, text=True, check=False)
+        res = subprocess.run(
+            ["chromium", "--version"], capture_output=True, text=True, check=False
+        )
         if res.returncode == 0:
             # Output: "Chromium 121.0.6167.85 ..."
             return res.stdout.strip().split()[-1]
     except Exception:
         pass
     return "143.0.0.0"  # Fallback version
+
 
 # 动态获取当前环境 Chrome 版本生成 User-Agent
 _chrome_ver = _get_system_chrome_version()
@@ -120,15 +130,16 @@ def create_logger() -> None:
     """
     global logger
     import logging
+
     # 日志级别映射字典
     LOG_LEVEL_MAP: dict[str, int] = {
-        'debug': logging.DEBUG,
-        'info': logging.INFO,
-        'warning': logging.WARNING,
-        'error': logging.ERROR,
-        'critical': logging.CRITICAL
+        "debug": logging.DEBUG,
+        "info": logging.INFO,
+        "warning": logging.WARNING,
+        "error": logging.ERROR,
+        "critical": logging.CRITICAL,
     }
-    log_level_str = bot_config.log_level.value if bot_config else 'info'
+    log_level_str = bot_config.log_level.value if bot_config else "info"
     log_level = LOG_LEVEL_MAP.get(log_level_str, logging.INFO)
     # 清除默认 logger 的 handlers，防止重复输出
     logging.getLogger().handlers.clear()
@@ -136,7 +147,7 @@ def create_logger() -> None:
     logger = Logger(level=log_level, log_dir="" if debug_mode else CONFIG)
 
     # 屏蔽 telethon 的 INFO 日志，避免刷屏
-    logging.getLogger('telethon').setLevel(logging.WARNING)
+    logging.getLogger("telethon").setLevel(logging.WARNING)
 
     logger.info("Logger init success!")
 
@@ -161,7 +172,7 @@ def load_yaml_config() -> None:
     try:
         # 获取yaml文件路径
         if os.path.exists(yaml_path):
-            with open(yaml_path, 'r', encoding='utf-8') as f:
+            with open(yaml_path, "r", encoding="utf-8") as f:
                 cfg = f.read()
             raw_config = yaml.load(cfg, Loader=yaml.FullLoader)
         else:
@@ -172,7 +183,7 @@ def load_yaml_config() -> None:
                 shutil.copy2(example_config_path, yaml_path)
                 print(f"已复制示例配置文件到 {yaml_path}")
                 # 重新读取配置文件
-                with open(yaml_path, 'r', encoding='utf-8') as f:
+                with open(yaml_path, "r", encoding="utf-8") as f:
                     cfg = f.read()
                 raw_config = yaml.load(cfg, Loader=yaml.FullLoader)
             else:
@@ -191,10 +202,12 @@ def get_bot_token() -> str:
     load_yaml_config()
     return bot_config.bot_token if bot_config else ""
 
+
 def create_tmp() -> None:
     if not os.path.exists(TEMP):
         os.mkdir(TEMP, mode=0o777)
         os.chmod(TEMP, 0o777)
+
 
 def initialize_tg_usr_client() -> bool:
     """
@@ -202,17 +215,29 @@ def initialize_tg_usr_client() -> bool:
     :return: bool - 初始化是否成功
     """
     global tg_user_client, bot_config, logger
-    assert bot_config is not None, "bot_config must be loaded before initializing TG client"
+    assert bot_config is not None, (
+        "bot_config must be loaded before initializing TG client"
+    )
     try:
         # 兼容老版本的配置项拼写错误
         if bot_config.bote_name:
-            logger.warn("检测到配置项 'bote_name'（拼写错误），已自动迁移到 'bot_name'。")
+            logger.warn(
+                "检测到配置项 'bote_name'（拼写错误），已自动迁移到 'bot_name'。"
+            )
             bot_config.bot_name = bot_config.bote_name
             bot_config.bote_name = None
 
-        if not bot_config.tg_api_id or not bot_config.tg_api_hash or not bot_config.bot_name:
-            logger.warn("缺少必要的Telegram API配置 (tg_api_id & tg_api_hash & bot_name), 无法使用视频上传功能。")
-            logger.warn("配置方法请参考：https://github.com/qiqiandfei/Telegram-115bot/wiki/VideoDownload")
+        if (
+            not bot_config.tg_api_id
+            or not bot_config.tg_api_hash
+            or not bot_config.bot_name
+        ):
+            logger.warn(
+                "缺少必要的Telegram API配置 (tg_api_id & tg_api_hash & bot_name), 无法使用视频上传功能。"
+            )
+            logger.warn(
+                "配置方法请参考：https://github.com/qiqiandfei/Telegram-115bot/wiki/VideoDownload"
+            )
             tg_user_client = None
             return False
 
@@ -222,33 +247,44 @@ def initialize_tg_usr_client() -> bool:
         # 检查并验证session文件
         if not create_tg_session_file():
             logger.warn("Session文件不可用，视频上传功能将被禁用。")
-            logger.warn("配置方法请参考：https://github.com/qiqiandfei/Telegram-115bot/wiki/VideoDownload")
+            logger.warn(
+                "配置方法请参考：https://github.com/qiqiandfei/Telegram-115bot/wiki/VideoDownload"
+            )
             tg_user_client = None
             return False
-        
+
         client_params = {
-            'session': TG_SESSION_FILE,
-            'api_id': api_id,
-            'api_hash': api_hash
+            "session": TG_SESSION_FILE,
+            "api_id": api_id,
+            "api_hash": api_hash,
         }
         # 使用环境变量的代理设置
         http_proxy = (os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY") or "").strip()
         if http_proxy:
             import socks
             from urllib.parse import urlparse
-            
+
             # 确保有 scheme，否则 urlparse 可能解析不准确
             target_proxy = http_proxy
             if "://" not in target_proxy:
                 target_proxy = f"http://{target_proxy}"
-            
+
             try:
                 parsed = urlparse(target_proxy)
                 if parsed.hostname and parsed.port:
                     # 支持用户名和密码认证
-                    client_params['proxy'] = (socks.HTTP, parsed.hostname, parsed.port, True, parsed.username, parsed.password)  # ty:ignore[invalid-assignment]
+                    client_params["proxy"] = (
+                        socks.HTTP,
+                        parsed.hostname,
+                        parsed.port,
+                        True,
+                        parsed.username,
+                        parsed.password,
+                    )  # ty:ignore[invalid-assignment]
                     auth_info = f" (user: {parsed.username})" if parsed.username else ""
-                    logger.info(f"Telegram 已启用HTTP代理: {parsed.hostname}:{parsed.port}{auth_info}")
+                    logger.info(
+                        f"Telegram 已启用HTTP代理: {parsed.hostname}:{parsed.port}{auth_info}"
+                    )
                 else:
                     logger.warn(f"环境变量代理格式无效: {http_proxy}")
             except Exception as e:
@@ -257,13 +293,16 @@ def initialize_tg_usr_client() -> bool:
         tg_user_client = TelegramClient(**client_params)
         logger.info(f"Telegram User Client 初始化成功，session路径: {TG_SESSION_FILE}")
         return True
-        
+
     except Exception as e:
         logger.warn(f"Telegram User Client 初始化失败: {e}")
-        logger.warn("配置方法请参考：https://github.com/qiqiandfei/Telegram-115bot/wiki/VideoDownload")
+        logger.warn(
+            "配置方法请参考：https://github.com/qiqiandfei/Telegram-115bot/wiki/VideoDownload"
+        )
         tg_user_client = None
         return False
-    
+
+
 def initialize_115open() -> bool:
     """
     初始化115开放API客户端
@@ -297,6 +336,7 @@ def check_user(user_id: int | str) -> bool:
         return user_id == allowed
     return str(user_id) == str(allowed)
 
+
 def create_tg_session_file() -> bool:
     """
     创建或验证Telegram session文件
@@ -305,15 +345,15 @@ def create_tg_session_file() -> bool:
     assert bot_config is not None
     tg_api_id = bot_config.tg_api_id or ""
     tg_api_hash = bot_config.tg_api_hash or ""
-    
+
     if not (tg_api_id and tg_api_hash):
         logger.error("缺少 tg_api_id 或 tg_api_hash 配置")
         return False
-    
+
     # 检查session文件是否存在
     if os.path.exists(TG_SESSION_FILE):
         logger.info("检测到现有session文件")
-        
+
         # 检查session文件是否为空或损坏
         try:
             file_size = os.path.getsize(TG_SESSION_FILE)
@@ -328,7 +368,7 @@ def create_tg_session_file() -> bool:
             # 删除可能损坏的session文件
             if os.path.exists(TG_SESSION_FILE):
                 os.remove(TG_SESSION_FILE)
-    
+
     # session文件不存在或无效时的提示
     if not os.path.exists(TG_SESSION_FILE):
         logger.warn("Session文件不存在，无法使用大视频转存功能！")
@@ -336,11 +376,13 @@ def create_tg_session_file() -> bool:
         logger.warn("或者将现有的 user_session.session 文件放置到 config 目录中。")
         logger.info("注意: 如果session文件过期，在实际使用时会自动重新授权")
         return False
-    
+
     return True
+
 
 def init_aria2() -> None:
     from app.utils.aria2 import create_aria2_client
+
     global aria2_client
     assert bot_config is not None
     if not bot_config.aria2.enable:
@@ -357,8 +399,10 @@ def init_aria2() -> None:
     else:
         aria2_client = None
 
+
 def init_db() -> None:
     from app.utils.sqlitelib import SqlLiteLib
+
     with SqlLiteLib() as sqlite:
         # 创建表（如果不存在）
         # create_table_query = '''
@@ -379,7 +423,7 @@ def init_db() -> None:
         # );
         # '''
         # sqlite.execute_sql(create_table_query)
-        create_table_query = '''
+        create_table_query = """
         CREATE TABLE IF NOT EXISTS offline_task (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT, -- 任务标题
@@ -390,9 +434,9 @@ def init_db() -> None:
             completed_at DATETIME, -- 完成时间
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP -- 创建时间，默认当前时间
         );
-        '''
+        """
         sqlite.execute_sql(create_table_query)
-        
+
         create_table_query = """
         CREATE TABLE IF NOT EXISTS av_daily_update (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -407,8 +451,8 @@ def init_db() -> None:
         );
         """
         sqlite.execute_sql(create_table_query)
-        
-        create_table_query = '''
+
+        create_table_query = """
         CREATE TABLE IF NOT EXISTS sub_movie (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             movie_name TEXT, -- 电影名称
@@ -422,10 +466,10 @@ def init_db() -> None:
             is_delete TINYINT DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP -- 创建时间，默认当前时间
         );
-        '''
+        """
         sqlite.execute_sql(create_table_query)
-        
-        create_table_query = '''
+
+        create_table_query = """
         CREATE TABLE IF NOT EXISTS sehua_data (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             section_name TEXT, -- 版块名称
@@ -442,10 +486,10 @@ def init_db() -> None:
             is_download TINYINT DEFAULT 0, -- 是否下载, 0或1, 默认0
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP -- 创建时间，默认当前时间
         );
-        '''
+        """
         sqlite.execute_sql(create_table_query)
-        
-        create_table_query = '''
+
+        create_table_query = """
         CREATE TABLE IF NOT EXISTS t66y (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             section_name TEXT, -- 版块名称
@@ -459,10 +503,10 @@ def init_db() -> None:
             is_download TINYINT DEFAULT 0, -- 是否下载, 0或1, 默认0
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP -- 创建时间，默认当前时间
         );
-        '''
+        """
         sqlite.execute_sql(create_table_query)
-        
-        create_table_query = '''
+
+        create_table_query = """
         CREATE TABLE IF NOT EXISTS javbus (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             av_number TEXT, -- 番号
@@ -478,10 +522,10 @@ def init_db() -> None:
             is_download TINYINT DEFAULT 0, -- 是否下载, 0或1, 默认0
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP -- 创建时间，默认当前时间
         );
-        '''
+        """
         sqlite.execute_sql(create_table_query)
         logger.info("init DataBase success.")
-        
+
 
 def init_log() -> None:
     create_logger()
@@ -499,6 +543,7 @@ def init() -> None:
     init_db()
     initialize_tg_usr_client()
     init_aria2()
+
 
 if __name__ == "__main__":
     load_yaml_config()

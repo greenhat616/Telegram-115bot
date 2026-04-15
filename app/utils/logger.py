@@ -13,7 +13,9 @@ class Logger:
         """
         self.logger = logging.getLogger()
         self.logger.setLevel(level)
-        fmt = logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s', '%Y-%m-%d %H:%M:%S')
+        fmt = logging.Formatter(
+            "[%(asctime)s] [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S"
+        )
 
         # 设置控制台输出
         ch = logging.StreamHandler()
@@ -23,7 +25,9 @@ class Logger:
 
         if log_dir:
             # 日志文件输出
-            fs = logging.FileHandler(os.path.join(log_dir, "115bot.log"), encoding="utf-8", mode='w')
+            fs = logging.FileHandler(
+                os.path.join(log_dir, "115bot.log"), encoding="utf-8", mode="w"
+            )
             fs.setLevel(level)
             fs.setFormatter(fmt)
             self.logger.addHandler(fs)
@@ -51,7 +55,7 @@ class Logger:
         :return:
         """
         self.logger.warning(message)
-        
+
     def warning(self, message):
         """
         告警消息
@@ -75,4 +79,3 @@ class Logger:
         :return:
         """
         self.logger.critical(message)
-

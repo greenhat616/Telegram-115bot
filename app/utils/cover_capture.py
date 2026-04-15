@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import sys
+
 current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
@@ -21,20 +22,17 @@ def get_movie_cover(query: str, page: int = 1) -> str:
     """
     base_url = "https://www.themoviedb.org"
     url = f"https://www.themoviedb.org/search/movie?query={query}&page={page}"
-    headers = {
-        "user-agent": init.USER_AGENT,
-        "accept-language": "zh-CN"
-    }
+    headers = {"user-agent": init.USER_AGENT, "accept-language": "zh-CN"}
     response = http_request("GET", url, headers=headers, timeout=(5, 30))
     if response.status_code != 200:
         return ""
     soup = BeautifulSoup(response.text, features="html.parser")
-    tags_p = soup.find_all('p')
+    tags_p = soup.find_all("p")
     for tag in tags_p:
         if "找不到和您的查询相符的电影" in tag.text:
             init.logger.info(f"TMDB未找到匹配电影: {query}")
             return ""
-    tags_img = soup.find_all('img')
+    tags_img = soup.find_all("img")
     image_tag = is_movie_exist(query, tags_img)
     if image_tag is None:
         if page >= 5:
@@ -42,19 +40,19 @@ def get_movie_cover(query: str, page: int = 1) -> str:
         page += 1
         time.sleep(3)
         return get_movie_cover(query, page)
-    tag_parent = image_tag.find_parent('a')  # ty:ignore[unresolved-attribute]
-    if tag_parent is None or 'href' not in tag_parent.attrs:
+    tag_parent = image_tag.find_parent("a")  # ty:ignore[unresolved-attribute]
+    if tag_parent is None or "href" not in tag_parent.attrs:
         return ""
-    main_page = tag_parent['href']
+    main_page = tag_parent["href"]
     url = base_url + main_page
     response = http_request("GET", url, headers=headers, timeout=(5, 30))
     if response.status_code != 200:
         return ""
     soup = BeautifulSoup(response.text, features="html.parser")
-    tags_img = soup.find_all('img')
-    if len(tags_img) > 1 and 'src' not in tags_img[1].attrs:
+    tags_img = soup.find_all("img")
+    if len(tags_img) > 1 and "src" not in tags_img[1].attrs:
         return ""
-    cover_url = str(tags_img[1]['src'])
+    cover_url = str(tags_img[1]["src"])
     return cover_url
 
 
@@ -93,7 +91,9 @@ def get_movie_cover(query: str, page: int = 1) -> str:
 #     return cover_url
 
 
-def is_movie_exist(movie_name: str, name_list: list) -> object | None:  # returns Tag | None
+def is_movie_exist(
+    movie_name: str, name_list: list
+) -> object | None:  # returns Tag | None
     """
     判断搜索结果是否存在
     :param url:
@@ -102,8 +102,8 @@ def is_movie_exist(movie_name: str, name_list: list) -> object | None:  # return
     """
     img_tag = None
     for name in name_list:
-        if 'alt' in name.attrs:
-            if name['alt'] == movie_name:
+        if "alt" in name.attrs:
+            if name["alt"] == movie_name:
                 img_tag = name
                 break
     return img_tag
@@ -130,14 +130,15 @@ def is_movie_exist(movie_name: str, name_list: list) -> object | None:  # return
 #     else:
 #         return "", ""
 
+
 def get_av_cover(query: str) -> tuple[str, str]:
     title = f"[{query}]已下好，但源没抓到~"
     cover_url = f"{init.IMAGE_PATH}/no_image.png"
-    
+
     async def _async_get_av_cover():
         nonlocal title, cover_url
         browser = SeleniumBrowser("https://avmoo.website/cn")
-        
+
         try:
             await browser.init_browser()
             if not browser.driver:
@@ -146,31 +147,31 @@ def get_av_cover(query: str) -> tuple[str, str]:
             search_url = f"https://avmoo.website/cn/search/{query}"
             await browser.goto(search_url)
             html = await browser.get_page_source()
-            soup = BeautifulSoup(html, 'html.parser')
+            soup = BeautifulSoup(html, "html.parser")
             # 找到class为"item"的div
-            item_div = soup.find('div', class_='item')
+            item_div = soup.find("div", class_="item")
             if not item_div:
                 return
             # 在item_div中找到a标签，class为"movie-box"
-            movie_link = item_div.find('a', class_='movie-box')
+            movie_link = item_div.find("a", class_="movie-box")
             if not movie_link:
                 return
-            link = movie_link['href']  # 获取href属性
+            link = movie_link["href"]  # 获取href属性
             link = str(link) if link else ""
-            if link.startswith('//'):
+            if link.startswith("//"):
                 link = f"https:{link}"
-            img_tag = movie_link.find('img')
+            img_tag = movie_link.find("img")
             if img_tag:
-                title = img_tag['title']
-            
+                title = img_tag["title"]
+
             await browser.goto(link)
             html = await browser.get_page_source()
-            soup = BeautifulSoup(html, 'html.parser')
-            screencap_div = soup.find('div', class_='screencap')
+            soup = BeautifulSoup(html, "html.parser")
+            screencap_div = soup.find("div", class_="screencap")
             if screencap_div:
-                big_image_link = screencap_div.find('a', class_='bigImage')
+                big_image_link = screencap_div.find("a", class_="bigImage")
                 if big_image_link:
-                    cover_url = big_image_link['href'] 
+                    cover_url = big_image_link["href"]
         except Exception as e:
             init.logger.error(f"获取AV封面内部错误: {e}")
         finally:
@@ -180,8 +181,9 @@ def get_av_cover(query: str) -> tuple[str, str]:
         asyncio.run(_async_get_av_cover())
     except Exception as e:
         init.logger.error(f"获取AV封面失败: {e}")
-        
+
     return cover_url, title
+
 
 def is_av_exist(div_list: list) -> bool:
     """
@@ -192,14 +194,14 @@ def is_av_exist(div_list: list) -> bool:
     is_found = True
     # 倒序遍历提高效率
     for div in reversed(div_list):
-        if 'class' in div.attrs:
-            if div['class'][0] == 'empty-message':
+        if "class" in div.attrs:
+            if div["class"][0] == "empty-message":
                 is_found = False
                 break
     return is_found
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # init.create_logger()
     # tmdb_id = get_tmdb_id("死人", 20)
     # print(f"TMDB ID: {tmdb_id}")

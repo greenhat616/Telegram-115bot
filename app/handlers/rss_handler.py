@@ -4,11 +4,26 @@ import httpx
 from app.utils.http_client import http_request_fast
 from bs4 import BeautifulSoup
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, CommandHandler, ConversationHandler, CallbackQueryHandler, MessageHandler, filters
+from telegram.ext import (
+    ContextTypes,
+    CommandHandler,
+    ConversationHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    filters,
+)
 from telegram.error import TelegramError
 import time
 from app import init
-from app.utils.ptb_helpers import require_message, require_query, require_chat, require_user, require_user_data, require_text, require_rss_data
+from app.utils.ptb_helpers import (
+    require_message,
+    require_query,
+    require_chat,
+    require_user,
+    require_user_data,
+    require_text,
+    require_rss_data,
+)
 from app.utils.message_queue import add_task_to_queue
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -24,28 +39,36 @@ RSS_CATEGORIES = ["JavBus", "草榴1024"]
 
 SELECT_MAIN_CATEGORY, SELECT_SUB_CATEGORY, RSS_WAIT_INPUT = range(70, 73)
 
+
 async def rss_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 权限检查
     usr_id = require_user(update).id
     if not init.check_user(usr_id):
         await require_message(update).reply_text("⚠️ 对不起，您无权使用115机器人！")
         return ConversationHandler.END
-    
+
     # 深度检查RSS配置（包含HTTP验证，移至线程池）
     error_message = await asyncio.to_thread(check_rss_config)
     if error_message:
         await require_message(update).reply_text(error_message)
         return ConversationHandler.END
-    
+
     # 构建主类别选择键盘
     keyboard = []
     for category in RSS_CATEGORIES:
-        keyboard.append([InlineKeyboardButton(category, callback_data=f"rss_main_{category}")])
+        keyboard.append(
+            [InlineKeyboardButton(category, callback_data=f"rss_main_{category}")]
+        )
     keyboard.append([InlineKeyboardButton("取消", callback_data="rss_quit")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await context.bot.send_message(chat_id=require_chat(update).id, text="❓请选择要订阅的RSS类别：", reply_markup=reply_markup)
+    await context.bot.send_message(
+        chat_id=require_chat(update).id,
+        text="❓请选择要订阅的RSS类别：",
+        reply_markup=reply_markup,
+    )
     return SELECT_MAIN_CATEGORY
-    
+
+
 async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = require_query(update)
     await query.answer()
@@ -55,8 +78,8 @@ async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYP
     if query_data == "cancel":
         return await quit_conversation(update, context)
     elif query_data.startswith("rss_main_"):
-        main_category = query_data[len("rss_main_"):]
-        require_user_data(context)['rss_main_category'] = main_category
+        main_category = query_data[len("rss_main_") :]
+        require_user_data(context)["rss_main_category"] = main_category
         # 根据主类别构建子类别选择键盘
         keyboard = []
         # 主类别为JavBus时，添加对应子类别
@@ -72,13 +95,14 @@ async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYP
             subcategories = [cat.name for cat in categories_config if cat.name]
 
             for subcat in subcategories:
-                keyboard.append([InlineKeyboardButton(subcat, callback_data=f"rss_sub_{subcat}")])
+                keyboard.append(
+                    [InlineKeyboardButton(subcat, callback_data=f"rss_sub_{subcat}")]
+                )
             keyboard.append([InlineKeyboardButton("取消", callback_data="rss_quit")])
             reply_markup = InlineKeyboardMarkup(keyboard)
-        
-    
+
         # 后续可继续添加其他子类别处理逻辑
-        if main_category == "草榴1024": 
+        if main_category == "草榴1024":
             # 检查草榴1024配置
             error_message = check_rss_config(main_category="草榴1024")
             if error_message:
@@ -89,14 +113,18 @@ async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYP
             sections = t66y_config.sections
             subcategories = [section.name for section in sections if section.name]
             for subcat in subcategories:
-                keyboard.append([InlineKeyboardButton(subcat, callback_data=f"rss_sub_{subcat}")])
+                keyboard.append(
+                    [InlineKeyboardButton(subcat, callback_data=f"rss_sub_{subcat}")]
+                )
             keyboard.append([InlineKeyboardButton("取消", callback_data="rss_quit")])
-            reply_markup = InlineKeyboardMarkup(keyboard)   
-            
-        await query.edit_message_text(text="❓请选择子类别：", reply_markup=reply_markup)
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.edit_message_text(
+            text="❓请选择子类别：", reply_markup=reply_markup
+        )
         return SELECT_SUB_CATEGORY
-            
-    
+
+
 async def select_sub_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = require_query(update)
     await query.answer()
@@ -106,68 +134,89 @@ async def select_sub_category(update: Update, context: ContextTypes.DEFAULT_TYPE
     if query_data == "rss_quit":
         return await quit_conversation(update, context)
     elif query_data.startswith("rss_sub_"):
-        sub_category = query_data[len("rss_sub_"):]
-        require_user_data(context)['rss_sub_category'] = sub_category
-        main_category = require_user_data(context).get('rss_main_category')
-        
+        sub_category = query_data[len("rss_sub_") :]
+        require_user_data(context)["rss_sub_category"] = sub_category
+        main_category = require_user_data(context).get("rss_main_category")
+
         if main_category == "JavBus":
             for category in init.require_bot_config().rsshub.javbus.category:
                 if category.name == sub_category:
-                    require_user_data(context)['selected_category'] = category
+                    require_user_data(context)["selected_category"] = category
                     if category.need_input:
-                        message = escape_markdown(f"⌨️ 请输入 **{sub_category}** 的关键词：\n注意：输入的内容需保证在JavBus有返回结果！", version=2)
-                        await query.edit_message_text(text=message, parse_mode='MarkdownV2')
+                        message = escape_markdown(
+                            f"⌨️ 请输入 **{sub_category}** 的关键词：\n注意：输入的内容需保证在JavBus有返回结果！",
+                            version=2,
+                        )
+                        await query.edit_message_text(
+                            text=message, parse_mode="MarkdownV2"
+                        )
                         return RSS_WAIT_INPUT
                     else:
-                        rss_host = init.require_bot_config().rsshub.rss_host.rstrip('/')
-                        route = (category.route or "").rstrip('/').lstrip('/')
+                        rss_host = init.require_bot_config().rsshub.rss_host.rstrip("/")
+                        route = (category.route or "").rstrip("/").lstrip("/")
                         rss_url = f"{rss_host}/{route}"
-                        message = escape_markdown(f"✅ 您已选择订阅：\n主类别：{main_category}\n子类别：{sub_category}\n\nJavBus订阅服务已启动，请稍后...", version=2)
-                        await query.edit_message_text(text=message, parse_mode='MarkdownV2')
+                        message = escape_markdown(
+                            f"✅ 您已选择订阅：\n主类别：{main_category}\n子类别：{sub_category}\n\nJavBus订阅服务已启动，请稍后...",
+                            version=2,
+                        )
+                        await query.edit_message_text(
+                            text=message, parse_mode="MarkdownV2"
+                        )
                         asyncio.create_task(rss_javbus(sub_category, rss_url, ""))
                         return ConversationHandler.END
-                    
+
         if main_category == "草榴1024":
-            rss_host = init.require_bot_config().rsshub.rss_host.rstrip('/')
-            message = escape_markdown(f"✅ 您已选择订阅：\n主类别：{main_category}\n子类别：{sub_category}\n\n草榴1024订阅服务已启动，请稍后...", version=2)
-            await query.edit_message_text(text=message, parse_mode='MarkdownV2')
+            rss_host = init.require_bot_config().rsshub.rss_host.rstrip("/")
+            message = escape_markdown(
+                f"✅ 您已选择订阅：\n主类别：{main_category}\n子类别：{sub_category}\n\n草榴1024订阅服务已启动，请稍后...",
+                version=2,
+            )
+            await query.edit_message_text(text=message, parse_mode="MarkdownV2")
             asyncio.create_task(start_t66y_rss_async(sub_category))
 
-        
         return ConversationHandler.END
+
 
 async def rss_handle_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = require_text(update).strip()
     data = require_rss_data(context)
-    sub_category = data.get('rss_sub_category')
-    main_category = data.get('rss_main_category')
-    selected_category = data.get('selected_category')
+    sub_category = data.get("rss_sub_category")
+    main_category = data.get("rss_main_category")
+    selected_category = data.get("selected_category")
 
-    rss_host = init.require_bot_config().rsshub.rss_host.rstrip('/')
+    rss_host = init.require_bot_config().rsshub.rss_host.rstrip("/")
     rss_url = ""
 
     if main_category == "JavBus" and selected_category and sub_category:
-        route = str(selected_category.route).rstrip('/').lstrip('/')  # ty:ignore[unresolved-attribute]
+        route = str(selected_category.route).rstrip("/").lstrip("/")  # ty:ignore[unresolved-attribute]
         rss_url = f"{rss_host}/{route}/{user_input}"
         # 启动后台任务
         asyncio.create_task(rss_javbus(sub_category, rss_url, user_input))
 
-    
     if rss_url:
-        message = escape_markdown(f"✅ 您已选择订阅：\n主类别：{main_category}\n子类别：{sub_category}\n关键词：{user_input}\n\nJavBus订阅服务已启动，请稍后...", version=2)
-        await require_message(update).reply_text(text=message, parse_mode='MarkdownV2')
+        message = escape_markdown(
+            f"✅ 您已选择订阅：\n主类别：{main_category}\n子类别：{sub_category}\n关键词：{user_input}\n\nJavBus订阅服务已启动，请稍后...",
+            version=2,
+        )
+        await require_message(update).reply_text(text=message, parse_mode="MarkdownV2")
     else:
-        await require_message(update).reply_text(text="⚠️ 生成RSS链接失败，请检查输入是否正确。")
-        
+        await require_message(update).reply_text(
+            text="⚠️ 生成RSS链接失败，请检查输入是否正确。"
+        )
+
     return ConversationHandler.END
+
 
 async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 检查是否是回调查询
     if update.callback_query:
         await update.callback_query.edit_message_text(text="🚪用户退出本次会话")
     else:
-        await context.bot.send_message(chat_id=require_chat(update).id, text="🚪用户退出本次会话")
+        await context.bot.send_message(
+            chat_id=require_chat(update).id, text="🚪用户退出本次会话"
+        )
     return ConversationHandler.END
+
 
 def check_rss_config(main_category: str | None = None) -> str:
     error_message = ""
@@ -218,6 +267,7 @@ def check_rss_config(main_category: str | None = None) -> str:
 
     return error_message
 
+
 def register_rss_handlers(application: Any) -> None:
     # 命令形式的下载交互
     download_command_handler = ConversationHandler(
@@ -225,7 +275,9 @@ def register_rss_handlers(application: Any) -> None:
         states={
             SELECT_MAIN_CATEGORY: [CallbackQueryHandler(select_main_category)],
             SELECT_SUB_CATEGORY: [CallbackQueryHandler(select_sub_category)],
-            RSS_WAIT_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, rss_handle_input)],
+            RSS_WAIT_INPUT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, rss_handle_input)
+            ],
         },  # ty:ignore[invalid-argument-type]
         fallbacks=[CommandHandler("q", quit_conversation)],  # ty:ignore[invalid-argument-type]
         conversation_timeout=300,

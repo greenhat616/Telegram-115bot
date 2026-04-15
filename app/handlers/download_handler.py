@@ -2,8 +2,14 @@
 from typing import Any
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, CommandHandler, ConversationHandler, \
-    MessageHandler, filters, CallbackQueryHandler
+from telegram.ext import (
+    ContextTypes,
+    CommandHandler,
+    ConversationHandler,
+    MessageHandler,
+    filters,
+    CallbackQueryHandler,
+)
 from telegram.error import TelegramError
 from telegram.helpers import escape_markdown
 from typing import cast
@@ -21,15 +27,28 @@ from telegram.warnings import PTBUserWarning
 from app.utils.sqlitelib import SqlLiteLib
 from app.models.enums import DownloadUrlType
 from app.models.dto import PendingTask, PendingPushTask
-from app.utils.ptb_helpers import require_message, require_query, require_chat, require_user, require_user_data, require_text, require_query_data, require_download_data
+from app.utils.ptb_helpers import (
+    require_message,
+    require_query,
+    require_chat,
+    require_user,
+    require_user_data,
+    require_text,
+    require_query_data,
+    require_download_data,
+)
 from concurrent.futures import ThreadPoolExecutor
 
-filterwarnings(action="ignore", message=r".*CallbackQueryHandler", category=PTBUserWarning)
+filterwarnings(
+    action="ignore", message=r".*CallbackQueryHandler", category=PTBUserWarning
+)
 
 SELECT_MAIN_CATEGORY, SELECT_SUB_CATEGORY = range(10, 12)
 
 # 全局线程池，用于处理下载任务
-download_executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="Movie_Download")
+download_executor = ThreadPoolExecutor(
+    max_workers=5, thread_name_prefix="Movie_Download"
+)
 
 
 async def start_d_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -50,20 +69,33 @@ async def start_d_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return ConversationHandler.END
     data["dl_url_type"] = dl_url_type
     keyboard = [
-        [InlineKeyboardButton(f"📁 {category.display_name}", callback_data=category.name)] for category in
-        config.category_folder
+        [
+            InlineKeyboardButton(
+                f"📁 {category.display_name}", callback_data=category.name
+            )
+        ]
+        for category in config.category_folder
     ]
     if "movie_last_save" in init.bot_session:
-        last_save_path = init.bot_session['movie_last_save']
-        keyboard.append([InlineKeyboardButton(f"📁 上次保存: {last_save_path}", callback_data="last_save_path")])
+        last_save_path = init.bot_session["movie_last_save"]
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    f"📁 上次保存: {last_save_path}", callback_data="last_save_path"
+                )
+            ]
+        )
     keyboard.append([InlineKeyboardButton("取消", callback_data="cancel")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await context.bot.send_message(chat_id=chat.id, text="❓请选择要保存到哪个分类：",
-                                   reply_markup=reply_markup)
+    await context.bot.send_message(
+        chat_id=chat.id, text="❓请选择要保存到哪个分类：", reply_markup=reply_markup
+    )
     return SELECT_MAIN_CATEGORY
 
 
-async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def select_main_category(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
     config = init.require_bot_config()
     query = require_query(update)
     user = require_user(update)
@@ -93,17 +125,22 @@ async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYP
         ][0]
 
         keyboard = [
-            [InlineKeyboardButton(f"📁 {category.name}", callback_data=category.path)] for category in sub_categories
+            [InlineKeyboardButton(f"📁 {category.name}", callback_data=category.path)]
+            for category in sub_categories
         ]
         keyboard.append([InlineKeyboardButton("取消", callback_data="cancel")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await query.edit_message_text("❓请选择分类保存目录：", reply_markup=reply_markup)
+        await query.edit_message_text(
+            "❓请选择分类保存目录：", reply_markup=reply_markup
+        )
 
         return SELECT_SUB_CATEGORY
 
 
-async def select_sub_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def select_sub_category(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
     query = require_query(update)
     user = require_user(update)
     data = require_download_data(context)
@@ -111,26 +148,28 @@ async def select_sub_category(update: Update, context: ContextTypes.DEFAULT_TYPE
     assert query.data is not None
 
     selected_path = query.data
-    init.bot_session['movie_last_save'] = selected_path  # type: ignore[assignment]
+    init.bot_session["movie_last_save"] = selected_path  # type: ignore[assignment]
 
     if selected_path == "cancel":
         return await quit_conversation(update, context)
     link = data["link"]
     selected_main_category = data["selected_main_category"]
     user_id = user.id
-    
+
     await query.edit_message_text("✅ 已为您添加到下载队列！\n请稍后~")
-    
+
     # 使用全局线程池异步执行下载任务
     download_executor.submit(download_task, link, selected_path, user_id)
     return ConversationHandler.END
 
 
-async def handle_retry_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_retry_callback(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """处理重试任务的回调"""
     query = require_query(update)
     await query.answer()
-    
+
     try:
         # 从callback_data中提取task_id
         task_id = require_query_data(update).replace("retry_", "")
@@ -146,25 +185,29 @@ async def handle_retry_callback(update: Update, context: ContextTypes.DEFAULT_TY
                 task_data.selected_path,
             )
 
-            await query.edit_message_text("✅ 已将失败任务添加到重试列表，系统将自动重试！")
+            await query.edit_message_text(
+                "✅ 已将失败任务添加到重试列表，系统将自动重试！"
+            )
 
             # 清理已使用的任务数据
             del init.pending_tasks[task_id]
         else:
             await query.edit_message_text("❌ 任务数据已过期")
-        
+
     except Exception as e:
         init.logger.error(f"处理重试回调失败: {e}")
         await query.edit_message_text("❌ 添加到重试列表失败，请稍后再试")
 
 
-async def handle_download_failure(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_download_failure(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """处理下载失败时的用户选择"""
     query = require_query(update)
     await query.answer()
-    
+
     choice = query.data
-    
+
     if choice == "cancel_download":
         # 取消下载
         await query.edit_message_text("✅ 已取消，可尝试更换磁力重试！")
@@ -179,20 +222,20 @@ async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return ConversationHandler.END
 
 
-def is_valid_link(link: str) -> DownloadUrlType:    
+def is_valid_link(link: str) -> DownloadUrlType:
     # 定义链接模式字典
     patterns = {
-        DownloadUrlType.MAGNET: r'^magnet:\?xt=urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})(?:&.+)?$',
-        DownloadUrlType.ED2K: r'^ed2k://\|file\|.+\|[0-9]+\|[a-fA-F0-9]{32}\|',
-        DownloadUrlType.THUNDER: r'^thunder://[a-zA-Z0-9=]+',
-        DownloadUrlType.HTTP: r'^(http|https)://[^\s]+$'
+        DownloadUrlType.MAGNET: r"^magnet:\?xt=urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})(?:&.+)?$",
+        DownloadUrlType.ED2K: r"^ed2k://\|file\|.+\|[0-9]+\|[a-fA-F0-9]{32}\|",
+        DownloadUrlType.THUNDER: r"^thunder://[a-zA-Z0-9=]+",
+        DownloadUrlType.HTTP: r"^(http|https)://[^\s]+$",
     }
-    
+
     # 检查基本链接类型
     for url_type, pattern in patterns.items():
         if re.match(pattern, link):
             return url_type
-        
+
     return DownloadUrlType.UNKNOWN
 
 
@@ -237,7 +280,7 @@ def create_strm_file(new_name: str, file_list: list[str]) -> None:
 
             # 如果原始文件存在，写入 .strm 文件
             # if mkv_file.exists():
-            with target_file.open('w', encoding='utf-8') as f:
+            with target_file.open("w", encoding="utf-8") as f:
                 f.write(str(mkv_file))
                 init.logger.info(f"strm文件创建成功，{target_file} -> {mkv_file}")
             # else:
@@ -259,7 +302,11 @@ def notice_emby_scan_library(path: str) -> bool:
     if not emby_server or not str(emby_server).strip():
         init.logger.warn("Emby Server 未配置，跳过通知Emby扫库")
         return False
-    if api_key is None or api_key.strip() == "" or api_key.strip().lower() == "your_api_key":
+    if (
+        api_key is None
+        or api_key.strip() == ""
+        or api_key.strip().lower() == "your_api_key"
+    ):
         init.logger.warn("Emby API Key 未配置，跳过通知Emby扫库")
         return False
     emby_server_str = str(emby_server).rstrip("/")
@@ -267,17 +314,12 @@ def notice_emby_scan_library(path: str) -> bool:
     headers = {
         "accept": "*/*",
         "X-Emby-Token": api_key,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
-    data = {
-        "Updates": [
-            {
-                "Path": str(movie_path_in_emby),
-                "UpdateType": "Created"
-            }
-        ]
-    }
-    emby_response = http_request_fast("POST", url, headers=headers, json=data, timeout=(5, 15))
+    data = {"Updates": [{"Path": str(movie_path_in_emby), "UpdateType": "Created"}]}
+    emby_response = http_request_fast(
+        "POST", url, headers=headers, json=data, timeout=(5, 15)
+    )
     if emby_response.text == "":
         init.logger.info("通知Emby扫库成功！")
         return True
@@ -293,33 +335,38 @@ def save_failed_download_to_db(title: str, magnet: str, save_path: str) -> None:
             # 检查是否已存在相同的任务
             check_sql = "SELECT * FROM offline_task WHERE magnet = ? AND save_path = ? AND title = ?"
             existing = sqlite.query_one(check_sql, (magnet, save_path, title))
-            
+
             if not existing:
                 sql = "INSERT INTO offline_task (title, magnet, save_path) VALUES (?, ?, ?)"
                 sqlite.execute_sql(sql, (title, magnet, save_path))
                 init.logger.info(f"[{title}]已添加到重试列表")
     except Exception as e:
         raise Exception(str(e)) from e
-    
-    
+
+
 def download_task(link: str, selected_path: str, user_id: int) -> None:
     """异步下载任务"""
     from app.utils.message_queue import add_task_to_queue
+
     api = init.require_openapi_115()
     info_hash = ""
     try:
         offline_success = api.offline_download_specify_path(link, selected_path)
         if not offline_success:
-            add_task_to_queue(user_id, f"{init.IMAGE_PATH}/male023.png", message=f"❌ 离线遇到错误！")
+            add_task_to_queue(
+                user_id, f"{init.IMAGE_PATH}/male023.png", message=f"❌ 离线遇到错误！"
+            )
             return
-            
+
         # 检查下载状态
-        download_success, resource_name, info_hash = api.check_offline_download_success(link)
-        
+        download_success, resource_name, info_hash = api.check_offline_download_success(
+            link
+        )
+
         if download_success:
             init.logger.info(f"✅ {resource_name} 离线下载成功！")
             time.sleep(1)
-            
+
             # 处理下载结果
             final_path = f"{selected_path}/{resource_name}"
             if api.is_directory(final_path):
@@ -332,10 +379,10 @@ def download_task(link: str, selected_path: str, user_id: int) -> None:
                 api.move_file(final_path, f"{selected_path}/{temp_folder}")
                 final_path = f"{selected_path}/{temp_folder}"
                 resource_name = temp_folder
-            
+
             # 为避免callback_data长度限制，使用时间戳作为唯一标识符
             task_id = str(int(time.time() * 1000))  # 毫秒时间戳作为唯一ID
-            
+
             init.pending_tasks[task_id] = PendingTask(
                 user_id=user_id,
                 action="manual_rename",
@@ -345,29 +392,35 @@ def download_task(link: str, selected_path: str, user_id: int) -> None:
                 link=link,
                 add2retry=False,
             )
-            
+
             # 发送下载成功通知，包含选择按钮
             keyboard = [
-                [InlineKeyboardButton("指定标准的TMDB名称", callback_data=f"rename_{task_id}")],
+                [
+                    InlineKeyboardButton(
+                        "指定标准的TMDB名称", callback_data=f"rename_{task_id}"
+                    )
+                ],
                 [InlineKeyboardButton("取消", callback_data=f"cancel_{task_id}")],
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            movie_name = get_movie_tmdb_name_with_ai(resource_name)  # 预调用AI接口，提前准备
+            movie_name = get_movie_tmdb_name_with_ai(
+                resource_name
+            )  # 预调用AI接口，提前准备
             if movie_name:
                 message = f"✅ \\[`{resource_name}`\\]离线下载完成\\!\n\n根据AI识别，推荐的TMDB名称是：`{movie_name}`\n\n请确认！"
             else:
                 message = f"✅ \\[`{resource_name}`\\]离线下载完成\\!\n\n如需削刮，请为资源指定TMDB的标准名称！"
-            
+
             add_task_to_queue(user_id, None, message=message, keyboard=reply_markup)
-            
+
         else:
             # 下载超时，删除任务并提供选择
             api.del_offline_task(info_hash)
             init.logger.warn(f"❌ {resource_name} 离线下载超时")
-            
+
             # 为失败重试也使用时间戳ID
             retry_task_id = str(int(time.time() * 1000))
-            
+
             init.pending_tasks[retry_task_id] = PendingTask(
                 user_id=user_id,
                 action="retry_download",
@@ -376,27 +429,37 @@ def download_task(link: str, selected_path: str, user_id: int) -> None:
                 link=link,
                 add2retry=True,
             )
-            
+
             # 提供重试选项
             keyboard = [
-                [InlineKeyboardButton("指定TMDB名称并添加到重试列表", callback_data=f"rename_{retry_task_id}")],
-                [InlineKeyboardButton("取消", callback_data="cancel_download")]
+                [
+                    InlineKeyboardButton(
+                        "指定TMDB名称并添加到重试列表",
+                        callback_data=f"rename_{retry_task_id}",
+                    )
+                ],
+                [InlineKeyboardButton("取消", callback_data="cancel_download")],
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             message = f"`{link}`\n\n😭 离线下载超时，请选择后续操作："
-            
+
             add_task_to_queue(user_id, None, message=message, keyboard=reply_markup)
-            
+
     except Exception as e:
         init.logger.error(f"💀下载遇到错误: {str(e)}")
-        add_task_to_queue(user_id, f"{init.IMAGE_PATH}/male023.png",
-                            message=f"❌ 下载任务执行出错: {escape_markdown(str(e), version=2)}")
+        add_task_to_queue(
+            user_id,
+            f"{init.IMAGE_PATH}/male023.png",
+            message=f"❌ 下载任务执行出错: {escape_markdown(str(e), version=2)}",
+        )
     finally:
         # 清除云端任务，避免重复下载
         init.require_openapi_115().del_offline_task(info_hash, del_source_file=0)
 
 
-async def handle_manual_rename_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_manual_rename_callback(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """处理手动重命名的回调"""
     query = require_query(update)
     data = require_user_data(context)
@@ -405,26 +468,31 @@ async def handle_manual_rename_callback(update: Update, context: ContextTypes.DE
     try:
         # 从callback_data中提取task_id
         task_id = require_query_data(update).replace("rename_", "")
-        
+
         # 从全局存储中获取任务数据
         if task_id in init.pending_tasks:
             task_data = init.pending_tasks[task_id]
 
             data["rename_data"] = task_data
 
-            await query.edit_message_text(f"`{task_data.resource_name}`\n\n📝 请直接回复TMDB标准名称进行重命名：\n\\(点击资源名称自动复制\\)", parse_mode='MarkdownV2')
+            await query.edit_message_text(
+                f"`{task_data.resource_name}`\n\n📝 请直接回复TMDB标准名称进行重命名：\n\\(点击资源名称自动复制\\)",
+                parse_mode="MarkdownV2",
+            )
 
             # 清理已使用的任务数据
             del init.pending_tasks[task_id]
         else:
             await query.edit_message_text("❌ 任务数据已过期，请重新下载")
-        
+
     except Exception as e:
         init.logger.error(f"处理手动重命名回调失败: {e}")
         await query.edit_message_text("❌ 处理失败，请稍后再试")
-        
-        
-async def handle_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+
+
+async def handle_cancel_callback(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """处理取消按钮的回调"""
     query = require_query(update)
     data = require_user_data(context)
@@ -433,30 +501,35 @@ async def handle_cancel_callback(update: Update, context: ContextTypes.DEFAULT_T
     try:
         # 从callback_data中提取task_id
         task_id = require_query_data(update).replace("cancel_", "")
-        
+
         # 从全局存储中清理任务数据
         if task_id in init.pending_tasks:
             task_data = init.pending_tasks[task_id]
-            resource_name = task_data.resource_name or '未知资源'
-            
+            resource_name = task_data.resource_name or "未知资源"
+
             # 清理任务数据
             del init.pending_tasks[task_id]
-            
+
             # 清理用户上下文中的重命名数据（如果存在）
             if "rename_data" in data:
                 del data["rename_data"]
-            
-            await query.edit_message_text(f"✅ 已取消对资源 `{resource_name}` 的重命名操作！", parse_mode='MarkdownV2')
+
+            await query.edit_message_text(
+                f"✅ 已取消对资源 `{resource_name}` 的重命名操作！",
+                parse_mode="MarkdownV2",
+            )
             init.logger.info(f"用户取消了对资源 {resource_name} 的重命名操作")
         else:
             await query.edit_message_text("✅ 重命名操作已取消！")
-            
+
     except Exception as e:
         init.logger.error(f"处理取消重命名操作时出错: {str(e)}")
         await query.edit_message_text("✅ 重命名操作已取消！")
 
 
-def _sync_rename_and_process(new_resource_name: str, rename_data: PendingTask) -> tuple[str, str, bool | None, bool]:
+def _sync_rename_and_process(
+    new_resource_name: str, rename_data: PendingTask
+) -> tuple[str, str, bool | None, bool]:
     """在工作线程中执行重命名及后续处理（同步阻塞操作）"""
     api = init.require_openapi_115()
     final_path = rename_data.final_path
@@ -475,6 +548,7 @@ def _sync_rename_and_process(new_resource_name: str, rename_data: PendingTask) -
 
     # 检查是否为订阅内容
     from app.core.subscribe_movie import is_subscribe, update_subscribe
+
     is_sub = is_subscribe(new_resource_name)
     if is_sub:
         update_subscribe(new_resource_name, cover_url, download_url)
@@ -484,7 +558,10 @@ def _sync_rename_and_process(new_resource_name: str, rename_data: PendingTask) -
 
     return new_final_path, cover_url, is_sub, is_noticed
 
-async def handle_manual_rename(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+
+async def handle_manual_rename(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """处理手动重命名（通过独立的消息处理器）"""
     data = require_user_data(context)
     rename_data_raw = data.get("rename_data")
@@ -505,12 +582,10 @@ async def handle_manual_rename(update: Update, context: ContextTypes.DEFAULT_TYP
 
         # 添加到重试列表
         if add2retry:
-            save_failed_download_to_db(
-                new_resource_name,
-                download_url,
-                selected_path
+            save_failed_download_to_db(new_resource_name, download_url, selected_path)
+            await context.bot.send_message(
+                chat_id=chat.id, text="✅ 已将失败任务添加到重试列表，系统将自动重试！"
             )
-            await context.bot.send_message(chat_id=chat.id, text="✅ 已将失败任务添加到重试列表，系统将自动重试！")
             data.pop("rename_data", None)
             return
 
@@ -523,7 +598,7 @@ async def handle_manual_rename(update: Update, context: ContextTypes.DEFAULT_TYP
             await context.bot.send_message(
                 chat_id=chat.id,
                 text=f"💡订阅影片`{new_resource_name}`已手动下载成功\\！",
-                parse_mode='MarkdownV2'
+                parse_mode="MarkdownV2",
             )
 
         if is_noticed:
@@ -539,7 +614,7 @@ async def handle_manual_rename(update: Update, context: ContextTypes.DEFAULT_TYP
                         chat_id=chat.id,
                         photo=cover_url,
                         caption=message,
-                        parse_mode='MarkdownV2'
+                        parse_mode="MarkdownV2",
                     )
                 else:
                     # 推送到aria2
@@ -551,9 +626,7 @@ async def handle_manual_rename(update: Update, context: ContextTypes.DEFAULT_TYP
         else:
             if not init.aria2_client:
                 await context.bot.send_message(
-                                                chat_id=chat.id,
-                                                text=message,
-                                                parse_mode='MarkdownV2'
+                    chat_id=chat.id, text=message, parse_mode="MarkdownV2"
                 )
             else:
                 # 推送到aria2
@@ -565,26 +638,28 @@ async def handle_manual_rename(update: Update, context: ContextTypes.DEFAULT_TYP
 
     except Exception as e:
         init.logger.error(f"重命名处理失败: {e}")
-        await context.bot.send_message(
-            chat_id=chat.id,
-            text=f"❌ 重命名失败: {str(e)}"
-        )
+        await context.bot.send_message(chat_id=chat.id, text=f"❌ 重命名失败: {str(e)}")
         data.pop("rename_data", None)
-        
-        
+
+
 def push2aria2(new_final_path: str, cover_url: str, message: str, user_id: int) -> None:
-    
+
     # 为Aria2推送创建任务ID系统
     import uuid
+
     push_task_id = str(uuid.uuid4())[:8]
-    
+
     # 初始化pending_push_tasks（如果不存在）
     init.pending_push_tasks[push_task_id] = PendingPushTask(path=new_final_path)
-    
-    device_name = init.require_bot_config().aria2.device_name or 'Aria2'
-    
+
+    device_name = init.require_bot_config().aria2.device_name or "Aria2"
+
     keyboard = [
-        [InlineKeyboardButton(f"推送到{device_name}", callback_data=f"push2aria2_{push_task_id}")]
+        [
+            InlineKeyboardButton(
+                f"推送到{device_name}", callback_data=f"push2aria2_{push_task_id}"
+            )
+        ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     if cover_url:
@@ -596,30 +671,46 @@ def push2aria2(new_final_path: str, cover_url: str, message: str, user_id: int) 
 def register_download_handlers(application: Any) -> None:
     # 命令形式的下载交互
     download_command_handler = ConversationHandler(
-         entry_points=[
+        entry_points=[
             MessageHandler(
-                filters.TEXT & filters.Regex(r'^(magnet:|ed2k://|ED2K://|thunder://|http://|https://)(?!.*\n).+$'),
-                start_d_command
+                filters.TEXT
+                & filters.Regex(
+                    r"^(magnet:|ed2k://|ED2K://|thunder://|http://|https://)(?!.*\n).+$"
+                ),
+                start_d_command,
             )
         ],  # ty:ignore[invalid-argument-type]
         states={
             SELECT_MAIN_CATEGORY: [CallbackQueryHandler(select_main_category)],
-            SELECT_SUB_CATEGORY: [CallbackQueryHandler(select_sub_category)]
+            SELECT_SUB_CATEGORY: [CallbackQueryHandler(select_sub_category)],
         },  # ty:ignore[invalid-argument-type]
         fallbacks=[CommandHandler("q", quit_conversation)],  # ty:ignore[invalid-argument-type]
         conversation_timeout=300,
     )
     application.add_handler(download_command_handler)
-    
+
     # 添加独立的回调处理器处理异步任务的后续操作
-    application.add_handler(CallbackQueryHandler(handle_manual_rename_callback, pattern=r"^rename_"))
-    application.add_handler(CallbackQueryHandler(handle_retry_callback, pattern=r"^retry_"))
+    application.add_handler(
+        CallbackQueryHandler(handle_manual_rename_callback, pattern=r"^rename_")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_retry_callback, pattern=r"^retry_")
+    )
     # cancel_download$ 必须在 cancel_ 之前注册，否则会被 cancel_ 匹配吞掉
-    application.add_handler(CallbackQueryHandler(handle_download_failure, pattern=r"^cancel_download$"))
-    application.add_handler(CallbackQueryHandler(handle_cancel_callback, pattern=r"^cancel_\d+$"))
-    
-    application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND & ~filters.Regex(r'^(magnet:|ed2k://|ED2K://|thunder://|http://|https://)'), 
-        handle_manual_rename
-    ), group=1)
+    application.add_handler(
+        CallbackQueryHandler(handle_download_failure, pattern=r"^cancel_download$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_cancel_callback, pattern=r"^cancel_\d+$")
+    )
+
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT
+            & ~filters.COMMAND
+            & ~filters.Regex(r"^(magnet:|ed2k://|ED2K://|thunder://|http://|https://)"),
+            handle_manual_rename,
+        ),
+        group=1,
+    )
     init.logger.info("✅ Downloader处理器已注册")

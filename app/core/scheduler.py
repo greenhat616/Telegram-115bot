@@ -14,46 +14,52 @@ from app.core.offline_task_retry import offline_task_retry
 
 scheduler = BackgroundScheduler()
 
+
 def get_sync_time(category: str) -> dict[str, int]:
     config = init.require_bot_config()
-    sync_time = {'hour': 3, 'minute': 0}  # 默认时间03:00
+    sync_time = {"hour": 3, "minute": 0}  # 默认时间03:00
     if category == "sehua":
         sehua_config = config.sehua_spider
         sehua_sync_time = sehua_config.sync_time
         try:
             hour, minute = map(int, sehua_sync_time.split(":"))
-            sync_time['hour'] = hour
-            sync_time['minute'] = minute
+            sync_time["hour"] = hour
+            sync_time["minute"] = minute
         except Exception as e:
             init.logger.warn(f"解析涩花同步时间失败: {e}，将使用默认时间 03:00")
         return sync_time
-    
+
     if category == "jav":
         # 使用 or {} 处理配置项为 None 的情况，避免 AttributeError
         jav_config = config.av_daily_update
         jav_sync_time = jav_config.sync_time
         try:
             hour, minute = map(int, jav_sync_time.split(":"))
-            sync_time['hour'] = hour
-            sync_time['minute'] = minute
+            sync_time["hour"] = hour
+            sync_time["minute"] = minute
         except Exception as e:
             init.logger.warn(f"解析JAV同步时间失败: {e}，将使用默认时间 20:00")
         return sync_time
 
     return sync_time
 
+
 def clear_request_count() -> None:
     """清除115请求计数"""
     api = init.require_openapi_115()
     init.logger.info(f"昨日累计115 OpenAPI请求次数: [{api.request_count}]")
-    cache_hit_rate = (api.cache_hit / api.request_count * 100) if api.request_count > 0 else 0
+    cache_hit_rate = (
+        (api.cache_hit / api.request_count * 100) if api.request_count > 0 else 0
+    )
     init.logger.info(f"昨日累计115 缓存命中率: [{cache_hit_rate:.2f}%]")
     init.logger.info("正在重置115请求计数...")
     api.clear_request_count()
     init.logger.info("115请求计数已重置！")
 
+
 # 定义任务列表
 tasks = []
+
 
 def init_tasks() -> None:
     global tasks
@@ -61,12 +67,46 @@ def init_tasks() -> None:
     jav_sync_time = get_sync_time("jav")
 
     tasks = [
-        {"id": "subscribe_movie_task", "func": schedule_movie, "interval": 4 * 60 * 60, "task_type": "interval"},
-        {"id": "av_daily_update_task", "func": av_daily_update, "hour": jav_sync_time.get("hour", 20), "minute": jav_sync_time.get("minute", 0), "task_type": "time"},
-        {"id": "offline_task_retry_task", "func": offline_task_retry, "hour": "9,18", "minute": 0, "task_type": "time"},
-        {"id": "retry_failed_downloads", "func": try_to_offline2115_again, "interval": 12 * 60 * 60, "task_type": "interval"},
-        {"id": "clear_request_count_task", "func": clear_request_count, "hour": 0, "minute": 0, "task_type": "time"},
-        {"id": "sehua_spider_task", "func": sehua_spider_start, "hour": sehua_sync_time.get("hour", 3), "minute": sehua_sync_time.get("minute", 0), "task_type": "time"}
+        {
+            "id": "subscribe_movie_task",
+            "func": schedule_movie,
+            "interval": 4 * 60 * 60,
+            "task_type": "interval",
+        },
+        {
+            "id": "av_daily_update_task",
+            "func": av_daily_update,
+            "hour": jav_sync_time.get("hour", 20),
+            "minute": jav_sync_time.get("minute", 0),
+            "task_type": "time",
+        },
+        {
+            "id": "offline_task_retry_task",
+            "func": offline_task_retry,
+            "hour": "9,18",
+            "minute": 0,
+            "task_type": "time",
+        },
+        {
+            "id": "retry_failed_downloads",
+            "func": try_to_offline2115_again,
+            "interval": 12 * 60 * 60,
+            "task_type": "interval",
+        },
+        {
+            "id": "clear_request_count_task",
+            "func": clear_request_count,
+            "hour": 0,
+            "minute": 0,
+            "task_type": "time",
+        },
+        {
+            "id": "sehua_spider_task",
+            "func": sehua_spider_start,
+            "hour": sehua_sync_time.get("hour", 3),
+            "minute": sehua_sync_time.get("minute", 0),
+            "task_type": "time",
+        },
     ]
 
 
@@ -76,7 +116,7 @@ def subscribe_scheduler() -> None:
 
     for task in tasks:
         if not scheduler.get_job(task["id"]):
-            if task['task_type'] == 'interval':
+            if task["task_type"] == "interval":
                 scheduler.add_job(
                     task["func"],
                     IntervalTrigger(seconds=task["interval"]),
@@ -85,7 +125,7 @@ def subscribe_scheduler() -> None:
                     coalesce=True,
                     misfire_grace_time=300,
                 )
-            if task['task_type'] == 'time':
+            if task["task_type"] == "time":
                 scheduler.add_job(
                     task["func"],
                     CronTrigger(hour=task["hour"], minute=task["minute"]),
@@ -101,17 +141,14 @@ def subscribe_scheduler() -> None:
 
 def stop_all_subscriptions() -> None:
     for task in tasks:
-        job = scheduler.get_job(task['id'])
+        job = scheduler.get_job(task["id"])
         if job:
-            scheduler.remove_job(task['id'])
+            scheduler.remove_job(task["id"])
             init.logger.info(f"任务 {task['id']} 已停止")
         else:
             init.logger.info(f"任务 {task['id']} 不存在")
 
 
-
-
 def start_scheduler_in_thread() -> None:
     """启动后台调度器（BackgroundScheduler 自带线程池，无需额外的守护线程）"""
     subscribe_scheduler()
-

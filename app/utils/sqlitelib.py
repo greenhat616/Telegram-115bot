@@ -34,7 +34,7 @@ class SqlLiteLib:
         self.cursor.execute(sql, params)
         res_list = self.cursor.fetchall()
         return res_list
-    
+
     def query_all(self, sql: str, params: tuple = ()):
         """查询所有记录，返回字典列表"""
         try:
@@ -45,7 +45,7 @@ class SqlLiteLib:
         except Exception as e:
             self.logger.error(f"执行查询时发生错误: {e}, sql: {sql}")
             return []
-    
+
     def query_one(self, sql: str, params=None):
         try:
             self.cursor.execute(sql, params or ())
@@ -54,7 +54,7 @@ class SqlLiteLib:
         except Exception as e:
             self.logger.error(f"执行查询时发生错误: {e}, sql: {sql}")
             return None
-            
+
     def query_row(self, sql: str, params=None):
         try:
             self.cursor.execute(sql, params or ())

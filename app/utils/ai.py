@@ -3,12 +3,14 @@ import sys
 import os
 import json
 from typing import Any
+
 current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 sys.path.append(current_dir)
 from app.utils.http_client import http_request_long
 from app import init
+
 
 def check_ai_api_available() -> bool:
     ai = init.require_bot_config().ai
@@ -22,6 +24,7 @@ def check_ai_api_available() -> bool:
         init.logger.warn("AI API Key 未定义.")
         return False
     return True
+
 
 def chat_completion(tip_words: str, max_tokens: int = 8192) -> dict[str, Any] | None:
     ai = init.require_bot_config().ai
@@ -37,64 +40,78 @@ def chat_completion(tip_words: str, max_tokens: int = 8192) -> dict[str, Any] | 
     payload = {
         "model": ai.model,
         "messages": [{"role": "user", "content": tip_words}],
-        "max_tokens": max_tokens
+        "max_tokens": max_tokens,
     }
     headers = {
         "Authorization": f"Bearer {ai.api_key}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
 
     try:
-        response = http_request_long("POST", url, json=payload, headers=headers, timeout=(10, 60))
+        response = http_request_long(
+            "POST", url, json=payload, headers=headers, timeout=(10, 60)
+        )
         if response.status_code != 200:
             init.logger.warn(f"AI API请求失败: {response.text}")
             return None
-            
+
         result = response.json()
         return result
-        
+
     except Exception as e:
         init.logger.error(f"调用AI接口出错: {e}")
         return None
 
+
 def get_movie_tmdb_name_with_ai(movie_desc: str) -> str | None:
-    
+
     if not check_ai_api_available():
         return None
-    
-    tip_words = f"'{movie_desc}' 请根据这个字符串，推断出可能的电影名称，然后根据电影名称，去TMDB网站(https://www.themoviedb.org)找到电影的TMDB ID，最后根据TMDB ID找到其对应的完整中文名称。注意：1. 优先匹配年份和英文原名。2. 如果有多个中文译名，请优先选择TMDB上的官方中文译名或最通用的译名。3. 有些系列电影可能会包含序号，比如：“侏罗纪公园2” 对应完整的中文名称应该是“侏罗纪公园2：失落的世界”。请返回json格式{{\"name\": \"完整的中文电影名称\"}} 。不要包含任何多余文字，如果找不到对应的中文名称请返回 {{\"name\": \"\"}}"
+
+    tip_words = f'\'{movie_desc}\' 请根据这个字符串，推断出可能的电影名称，然后根据电影名称，去TMDB网站(https://www.themoviedb.org)找到电影的TMDB ID，最后根据TMDB ID找到其对应的完整中文名称。注意：1. 优先匹配年份和英文原名。2. 如果有多个中文译名，请优先选择TMDB上的官方中文译名或最通用的译名。3. 有些系列电影可能会包含序号，比如：“侏罗纪公园2” 对应完整的中文名称应该是“侏罗纪公园2：失落的世界”。请返回json格式{{"name": "完整的中文电影名称"}} 。不要包含任何多余文字，如果找不到对应的中文名称请返回 {{"name": ""}}'
     try:
         result = chat_completion(tip_words)
         init.logger.info(f"AI原始响应: {result}")
-        
+
         # 解析返回结果
         # 针对Anthropic/SiliconFlow messages接口: {'content': [{'text': '{"name": "..."}'...} ...}
-        if isinstance(result, dict) and 'content' in result and isinstance(result['content'], list) and len(result['content']) > 0:
-            text_content = result['content'][0].get('text', '')
+        if (
+            isinstance(result, dict)
+            and "content" in result
+            and isinstance(result["content"], list)
+            and len(result["content"]) > 0
+        ):
+            text_content = result["content"][0].get("text", "")
             # 清理可能存在的markdown标记
             if "```" in text_content:
-                text_content = text_content.replace("```json", "").replace("```", "").strip()
-            
+                text_content = (
+                    text_content.replace("```json", "").replace("```", "").strip()
+                )
+
             try:
                 json_data = json.loads(text_content)
-                return json_data.get('name')
+                return json_data.get("name")
             except json.JSONDecodeError:
                 init.logger.warn(f"AI返回的不是有效的JSON格式: {text_content}")
                 return None
 
         # 兼容OpenAI格式: choices[0].message.content
-        if isinstance(result, dict) and 'choices' in result and len(result['choices']) > 0:
-            content = result['choices'][0]['message']['content']
+        if (
+            isinstance(result, dict)
+            and "choices" in result
+            and len(result["choices"]) > 0
+        ):
+            content = result["choices"][0]["message"]["content"]
             if "```" in content:
                 content = content.replace("```json", "").replace("```", "").strip()
             try:
                 json_data = json.loads(content)
-                return json_data.get('name')
+                return json_data.get("name")
             except json.JSONDecodeError:
                 return None
-                
+
         return None
-        
+
     except Exception as e:
         init.logger.error(f"调用AI接口出错: {e}")
         return None

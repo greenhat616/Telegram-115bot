@@ -10,20 +10,20 @@ from app.utils.http_client import http_request
 from app.core.offline_task_retry import av_daily_offline
 
 
-def get_max_page(html_content: str) -> int:    
+def get_max_page(html_content: str) -> int:
     """
     获取最新AV的最大页数
     :return: 最大页数
     """
-    soup = BeautifulSoup(html_content, 'html.parser')
+    soup = BeautifulSoup(html_content, "html.parser")
     # 查找所有的页码链接
-    page_links = soup.select('ul.pagination-list li a.pagination-link')
+    page_links = soup.select("ul.pagination-list li a.pagination-link")
     page_numbers = []
     for link in page_links:
-        href = link.get('href')
-        if href and 'page=' in href:
+        href = link.get("href")
+        if href and "page=" in href:
             # 从href中提取页码数字
-            page_num = int(href.split('page=')[1])  # ty:ignore[unresolved-attribute]
+            page_num = int(href.split("page=")[1])  # ty:ignore[unresolved-attribute]
             page_numbers.append(page_num)
         elif link.text.isdigit():
             # 如果链接没有href但有数字文本
@@ -33,37 +33,43 @@ def get_max_page(html_content: str) -> int:
         max_page = max(page_numbers)
     return max_page
 
+
 def get_today_av() -> list[dict[str, str]] | None:
     date = datetime.datetime.now().strftime("%Y-%m-%d")
     url = f"https://javbee.vip/date/{date}"
-    response = http_request("GET", url, verify=False, timeout=httpx.Timeout(60.0, connect=10.0))
+    response = http_request(
+        "GET", url, verify=False, timeout=httpx.Timeout(60.0, connect=10.0)
+    )
     if response.status_code == 500:
         init.logger.warn(f"服务器响应错误，可能是[{date}]尚未更新。")
         return None
     if response.status_code != 200:
         init.logger.warn(f"获取[{date}]日更信息错误，HTTP Code: {response.status_code}")
         return None
-    
+
     # 抓取磁力
     return crawl_javbee(url, response.text, date)
 
 
 def get_av_by_date(date: str) -> list[dict[str, str]] | None:
     url = f"https://javbee.vip/date/{date}"
-    response = http_request("GET", url, verify=False, timeout=httpx.Timeout(60.0, connect=10.0))
+    response = http_request(
+        "GET", url, verify=False, timeout=httpx.Timeout(60.0, connect=10.0)
+    )
     if response.status_code == 500:
         init.logger.warn(f"服务器响应错误，可能是[{date}]尚未更新。")
         return None
     if response.status_code != 200:
         init.logger.warn(f"获取[{date}]日更信息错误，HTTP Code: {response.status_code}")
         return None
-    
+
     # 抓取磁力
     return crawl_javbee(url, response.text, date)
-       
-    
-    
-def crawl_javbee(url: str, html_content: str, publish_date: str) -> list[dict[str, str]] | None:
+
+
+def crawl_javbee(
+    url: str, html_content: str, publish_date: str
+) -> list[dict[str, str]] | None:
     max_page = get_max_page(html_content)
     if not max_page:
         return None
@@ -71,49 +77,63 @@ def crawl_javbee(url: str, html_content: str, publish_date: str) -> list[dict[st
         results = []
         for page in range(1, max_page + 1):
             page_url = f"{url}?page={page}"
-            response = http_request("GET", page_url, verify=False, timeout=httpx.Timeout(60.0, connect=10.0))
-            soup = BeautifulSoup(response.text, 'html.parser')
-            cards = soup.find_all('div', class_='card mb-3')
+            response = http_request(
+                "GET", page_url, verify=False, timeout=httpx.Timeout(60.0, connect=10.0)
+            )
+            soup = BeautifulSoup(response.text, "html.parser")
+            cards = soup.find_all("div", class_="card mb-3")
             for card in cards:
                 # 1. 提取番号+标题（从<h5>中的<a>标签）
-                title_tag = card.select_one('h5.title a')
+                title_tag = card.select_one("h5.title a")
                 if title_tag:
-                    pub_url = title_tag['href'] if title_tag.has_attr('href') else "N/A"
+                    pub_url = title_tag["href"] if title_tag.has_attr("href") else "N/A"
                     full_text = title_tag.get_text(strip=True)  # 获取纯文本
-                    parts = full_text.strip().split(' ')  # 按空格分割
+                    parts = full_text.strip().split(" ")  # 按空格分割
                     av_number, av_title = get_avnumber_title(parts)
                 else:
                     av_number, av_title, pub_url = "N/A", "N/A", "N/A"
 
                 # 2. 提取封面（从<img>的data-src属性）
-                img_tag = card.find('img', class_='image lazy')
-                cover_url = img_tag['data-src'] if img_tag and img_tag.has_attr('data-src') else "N/A"
-                
+                img_tag = card.find("img", class_="image lazy")
+                cover_url = (
+                    img_tag["data-src"]
+                    if img_tag and img_tag.has_attr("data-src")
+                    else "N/A"
+                )
+
                 # 3. 提取磁力链接（关键新增部分）
-                magnet_tag = card.find('a', title="Download Magnet")
-                magnet_url = str(magnet_tag['href']) if magnet_tag and magnet_tag.has_attr('href') else "N/A"
+                magnet_tag = card.find("a", title="Download Magnet")
+                magnet_url = (
+                    str(magnet_tag["href"])
+                    if magnet_tag and magnet_tag.has_attr("href")
+                    else "N/A"
+                )
                 magnet_url = get_minimal_magnet(magnet_url)  # 获取最小化的磁力链接
-    
+
                 if av_number == "N/A" or av_title == "N/A" or magnet_url == "N/A":
                     break
                 # 保存结果
-                results.append({
-                    'av_number': av_number,
-                    'av_title': av_title,
-                    'cover_url': cover_url,
-                    'magnet_url': magnet_url,
-                    'publish_date': publish_date,
-                    'pub_url': pub_url
-                })
+                results.append(
+                    {
+                        "av_number": av_number,
+                        "av_title": av_title,
+                        "cover_url": cover_url,
+                        "magnet_url": magnet_url,
+                        "publish_date": publish_date,
+                        "pub_url": pub_url,
+                    }
+                )
             time.sleep(3)  # 避免请求过快
         return results
-    
-    
+
+
 def get_yesterday_av() -> list[dict[str, str]] | None:
     yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
     date = yesterday.strftime("%Y-%m-%d")
     url = f"https://javbee.vip/date/{date}"
-    response = http_request("GET", url, verify=False, timeout=httpx.Timeout(60.0, connect=10.0))
+    response = http_request(
+        "GET", url, verify=False, timeout=httpx.Timeout(60.0, connect=10.0)
+    )
     if response.status_code == 500:
         init.logger.warn(f"服务器响应错误，可能是[{date}]尚未更新。")
         return None
@@ -136,49 +156,65 @@ def check_yesterday_exists() -> bool:
 def save_av_daily_update2db(results: list[dict[str, str]]) -> None:
     with SqlLiteLib() as sqlite:
         for item in results:
-            av_number = item['av_number']
-            publish_date = item['publish_date']
-            title = item['av_title']
-            post_url = item['cover_url']
-            magnet = item['magnet_url']
-            pub_url = item['pub_url']
+            av_number = item["av_number"]
+            publish_date = item["publish_date"]
+            title = item["av_title"]
+            post_url = item["cover_url"]
+            magnet = item["magnet_url"]
+            pub_url = item["pub_url"]
 
-            if not av_number or not publish_date or not title or not magnet or not pub_url:
-                init.logger.warn(f"跳过无效的AV记录，番号: {av_number}, 标题: {title}, 发布链接: {pub_url}")
+            if (
+                not av_number
+                or not publish_date
+                or not title
+                or not magnet
+                or not pub_url
+            ):
+                init.logger.warn(
+                    f"跳过无效的AV记录，番号: {av_number}, 标题: {title}, 发布链接: {pub_url}"
+                )
                 continue
-            
+
             from app.core.sehua_spider import check_magnet
+
             if check_magnet(magnet) is False:
                 init.logger.warn(f"[{magnet}]磁力链接格式不正确，跳过入库!")
                 continue
-            
+
             # 检查是否已存在相同的记录
             from app.core.sehua_spider import get_magnet_hash
+
             magnet_hash = get_magnet_hash(magnet)
             if magnet_hash:
                 # 如果能提取到hash，使用模糊匹配查询
                 sql_check = "select count(*) from av_daily_update where magnet LIKE ?"
-                params_check = (f'%{magnet_hash}%', )
+                params_check = (f"%{magnet_hash}%",)
             else:
                 # 提取不到hash，回退到完全匹配
                 sql_check = "select count(*) from av_daily_update where magnet = ?"
-                params_check = (magnet, )
+                params_check = (magnet,)
 
             count = sqlite.query_one(sql_check, params_check)
             if count > 0:
-                init.logger.info(f"[{title}]检测到相同磁力链接(Hash: {magnet_hash})已存在，跳过入库！")
+                init.logger.info(
+                    f"[{title}]检测到相同磁力链接(Hash: {magnet_hash})已存在，跳过入库！"
+                )
                 continue  # 已存在，跳过
-            
+
             # 判断数据完整性
-            if not av_number or \
-                not publish_date or \
-                not title or \
-                not post_url or \
-                not magnet or \
-                not pub_url:
-                init.logger.warn(f"AV番号: {av_number}, 标题: {title} 数据不完整，跳过入库！")
+            if (
+                not av_number
+                or not publish_date
+                or not title
+                or not post_url
+                or not magnet
+                or not pub_url
+            ):
+                init.logger.warn(
+                    f"AV番号: {av_number}, 标题: {title} 数据不完整，跳过入库！"
+                )
                 continue
-            
+
             # 插入新记录
             sql_insert = """
                 INSERT INTO av_daily_update (av_number, publish_date, title, post_url, magnet, pub_url)
@@ -186,14 +222,15 @@ def save_av_daily_update2db(results: list[dict[str, str]]) -> None:
             """
             params_insert = (av_number, publish_date, title, post_url, magnet, pub_url)
             sqlite.execute_sql(sql_insert, params_insert)
-            init.logger.info(f"AV日更 {av_number} 保存成功。")   
-            
+            init.logger.info(f"AV日更 {av_number} 保存成功。")
+
+
 def av_daily_update() -> None:
     # 检查配置是否启用AV日更
     if not init.require_bot_config().av_daily_update.enable:
         init.logger.info("AV日更功能未启用，跳过更新。")
         return
-    
+
     # 如果昨天漏更了，再次尝试获取昨天的更新
     yesterday_results = []
     if not check_yesterday_exists():
@@ -204,7 +241,7 @@ def av_daily_update() -> None:
     today_results = []
     init.logger.info("开始获取今天的AV更新...")
     today_results = get_today_av()
-    
+
     results = []
     # 合并昨天和今天的结果
     if yesterday_results:
@@ -219,9 +256,9 @@ def av_daily_update() -> None:
         # 离线到115
         av_daily_offline()
     else:
-        init.logger.info("没有找到最新的AV更新。")  
-        
-        
+        init.logger.info("没有找到最新的AV更新。")
+
+
 def crawl_javbee_by_date(date: str) -> None:
     init.logger.info(f"开始获取{date}的AV更新...")
     results = get_av_by_date(date)
@@ -232,27 +269,31 @@ def crawl_javbee_by_date(date: str) -> None:
         # 离线到115
         av_daily_offline()
     else:
-        init.logger.info(f"{date}没有找到AV更新。")  
+        init.logger.info(f"{date}没有找到AV更新。")
     init.CRAWL_JAV_STATUS = 0
-        
-        
+
+
 def get_minimal_magnet(magnet_link: str) -> str:
     return re.sub(r"(&dn=.*|&tr=.*)", "", magnet_link)
+
 
 def has_cjk_chars(text: str) -> bool:
     """检查字符串是否包含中文或日文字符"""
     pattern = re.compile(
-        r'[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\u31f0-\u31ff\uff65-\uff9f]'
+        r"[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\u31f0-\u31ff\uff65-\uff9f]"
     )
     return bool(pattern.search(text))
 
+
 def is_pure_number(s: str) -> bool:
     """检查是否为纯数字"""
-    return bool(re.fullmatch(r'^\d+$', s)) 
+    return bool(re.fullmatch(r"^\d+$", s))
+
 
 def has_letters_and_digits(s: str) -> bool:
     """检查是否同时包含英文和数字（允许-和_）"""
-    return bool(re.fullmatch(r'^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d\-_]+$', s))
+    return bool(re.fullmatch(r"^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d\-_]+$", s))
+
 
 def get_avnumber_title(parts: list[str]) -> tuple[str, str]:
     longest = 0
@@ -264,8 +305,10 @@ def get_avnumber_title(parts: list[str]) -> tuple[str, str]:
             longest = len(part)
             longest_index = i
         if longest_index != -1:
-            av_title = parts[longest_index] 
-        if (is_pure_number(part) or has_letters_and_digits(part)) and i != len(parts) - 1:
+            av_title = parts[longest_index]
+        if (is_pure_number(part) or has_letters_and_digits(part)) and i != len(
+            parts
+        ) - 1:
             av_number = part
     return av_number, av_title
 
@@ -290,7 +333,9 @@ if __name__ == "__main__":
     # date = datetime.datetime.now() - datetime.timedelta(days=1)
     # print(f"昨天日期: {date.strftime('%Y-%m-%d')}")
     url = f"https://javbee.vip/date/2025-08-26"
-    response = http_request("GET", url, verify=False, timeout=httpx.Timeout(60.0, connect=10.0))
-    result = crawl_javbee(url, response.text, '2025-08-26')
-    for item in (result or []):
-        print(item['av_number'], item['av_title'], item['magnet_url'])
+    response = http_request(
+        "GET", url, verify=False, timeout=httpx.Timeout(60.0, connect=10.0)
+    )
+    result = crawl_javbee(url, response.text, "2025-08-26")
+    for item in result or []:
+        print(item["av_number"], item["av_title"], item["magnet_url"])

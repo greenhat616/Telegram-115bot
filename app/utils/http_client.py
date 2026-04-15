@@ -51,20 +51,26 @@ def _coerce_timeout(timeout: Any) -> httpx.Timeout | None:
 
 
 def _retryable_exception(exc: BaseException) -> bool:
-    return isinstance(exc, (
-        httpx.ConnectError,
-        httpx.TimeoutException,
-        httpx.RemoteProtocolError,
-        httpx.PoolTimeout,
-    ))
+    return isinstance(
+        exc,
+        (
+            httpx.ConnectError,
+            httpx.TimeoutException,
+            httpx.RemoteProtocolError,
+            httpx.PoolTimeout,
+        ),
+    )
 
 
 def _retryable_fast_exception(exc: BaseException) -> bool:
-    return isinstance(exc, (
-        httpx.ConnectError,
-        httpx.TimeoutException,
-        httpx.PoolTimeout,
-    ))
+    return isinstance(
+        exc,
+        (
+            httpx.ConnectError,
+            httpx.TimeoutException,
+            httpx.PoolTimeout,
+        ),
+    )
 
 
 def _retryable_5xx(response: object) -> bool:
@@ -86,7 +92,9 @@ def _select_client(use_long_io: bool = False, verify: bool = True) -> httpx.Clie
     return _default_client if verify else _default_insecure_client
 
 
-def _send(method: str, url: str, *, use_long_io: bool = False, **kwargs: Any) -> httpx.Response:
+def _send(
+    method: str, url: str, *, use_long_io: bool = False, **kwargs: Any
+) -> httpx.Response:
     verify = kwargs.pop("verify", True)
     timeout = _coerce_timeout(kwargs.pop("timeout", None))
     client = _select_client(use_long_io=use_long_io, verify=verify)

@@ -69,7 +69,9 @@ def require_av_download_data(context: ContextTypes.DEFAULT_TYPE) -> AvDownloadUs
     return cast(AvDownloadUserData, require_user_data(context))
 
 
-def require_subscribe_movie_data(context: ContextTypes.DEFAULT_TYPE) -> SubscribeMovieUserData:
+def require_subscribe_movie_data(
+    context: ContextTypes.DEFAULT_TYPE,
+) -> SubscribeMovieUserData:
     return cast(SubscribeMovieUserData, require_user_data(context))
 
 

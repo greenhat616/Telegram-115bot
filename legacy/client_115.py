@@ -88,8 +88,8 @@
 #             time_out += 10
 #         self.logger.warn(f"[{resource_name}]离线下载超时!")
 #         return download_success
-    
-    
+
+
 #     def clear_failed_task(self, url, resource_name):
 #         offline_list = self.client.offline_list()
 #         tasks = offline_list['tasks']
@@ -107,7 +107,7 @@
 #                     else:
 #                         self.logger.warn(f"删除离线任务失败: {response}")
 #                     break
-        
+
 #         except Exception as e:
 #             self.logger.error(f"清理离线任务时出错: {str(e)}")
 
@@ -208,8 +208,8 @@
 #         except FileNotFoundError as e:
 #             self.client.fs.mkdir(path)
 #             time.sleep(3)
-            
-    
+
+
 #     def save_shared_link(self, path: str, share_code: str, receive_code: str):
 #         """
 #         保存115分享链接中的内容到指定路径
@@ -220,7 +220,7 @@
 #             if not res:
 #                 self.logger.error("获取分享文件系统失败")
 #                 return False, []
-            
+
 #             # 获取或创建目标路径
 #             try:
 #                 path_info = self.client.fs_dir_getid(path)
@@ -230,19 +230,19 @@
 #                 self.create_folder(path)
 #                 path_info = self.client.fs_dir_getid(path)
 #                 pid = path_info['id']
-            
+
 #             # 获取分享内容的文件列表
 #             files_data = share_fs.fs_files({"limit": 1000})
-            
+
 #             if not isinstance(files_data, dict) or 'data' not in files_data or 'list' not in files_data['data']:
 #                 self.logger.error("获取分享文件列表失败")
 #                 return False, []
-            
+
 #             # 收集所有文件的ID和名称
 #             file_ids = []
 #             file_names = []
 #             total_size = 0
-            
+
 #             for file_info in files_data['data']['list']:
 #                 if 'fid' in file_info:  # 文件
 #                     file_name = os.path.splitext(file_info['n'])[0]  # 去掉扩展名
@@ -259,35 +259,35 @@
 #                 else:
 #                     self.logger.error(f"文件[{file_info.get('n', 'unknown')}]结构异常，暂不支持保存")
 #                     return False, []
-                        
+
 #                 self.logger.info(
 #                     f"准备保存{'文件' if 'fid' in file_info else '文件夹'}: {file_info['n']} "
 #                     f"(大小: {self._format_size(file_info['s'])})"
 #                 )
-            
+
 #             if not file_ids:
 #                 self.logger.warning("分享链接中没有可保存的文件")
 #                 return True, []
-            
+
 #             # 批量接收文件到指定目录
 #             result = share_fs.receive(file_ids, to_pid=pid)
-            
+
 #             if not result.get('state', False):
 #                 self.logger.error(f"保存文件失败: {result}")
 #                 return False, []
-                
+
 #             self.logger.info(
 #                 f"成功保存 {len(file_names)} 个文件到 {path}\n"
 #                 f"总大小: {self._format_size(total_size)}\n"
 #                 f"文件列表: {', '.join(file_names)}"
 #             )
-            
+
 #             return True, file_names
-            
+
 #         except Exception as e:
 #             self.logger.error(f"保存分享链接失败: {str(e)}")
 #             return False, []
-            
+
 #     def _format_size(self, size_in_bytes: int) -> str:
 #         """将字节大小转换为人类可读格式"""
 #         for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
@@ -295,7 +295,6 @@
 #                 return f"{size_in_bytes:.2f} {unit}"
 #             size_in_bytes /= 1024
 #         return f"{size_in_bytes:.2f} PB"
-        
 
 
 #     # def get_file_from_path(self, path, file_list, max_delay=3):
@@ -312,7 +311,6 @@
 #     #             suffix = os.path.splitext(item['n'])[1]
 #     #             if suffix in ".mkv;.iso;.ts;.mp4;.avi;.rmvb;.wmv;.m2ts;.mpg;.flv;.rm;.mov":
 #     #                 file_list.append(f"{path}/{item['n']}")
-    
 
 
 # if __name__ == '__main__':
