@@ -1,6 +1,6 @@
 [project]
 name = "telegram-115bot"
-version = "3.4.1"
+version = "3.5.0"
 description = "Telegram bot for 115 cloud storage management"
 readme = "README.md"
 license = "MIT"
