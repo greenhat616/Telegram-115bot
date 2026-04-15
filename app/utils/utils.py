@@ -6,7 +6,7 @@ import yaml
 import os
 from urllib.parse import urlparse, parse_qs
 
-def read_yaml_file(yaml_path):
+def read_yaml_file(yaml_path: str) -> dict | None:
     # 获取yaml文件名称
     try:
         # 获取yaml文件路径
@@ -17,13 +17,13 @@ def read_yaml_file(yaml_path):
             yaml_conf = yaml.load(cfg, Loader=yaml.FullLoader)
             return yaml_conf
         else:
-           return False
+           return None
     except Exception as e:
         init.logger.warn(f"配置文件[{yaml_path}]格式有误，请检查!")
-        return False
+        return None
 
 
-def random_waite(min=2, max=15):
+def random_waite(min: int = 2, max: int = 15) -> None:
     import random
     import time
     wait_time = random.randint(min, max)
@@ -32,7 +32,7 @@ def random_waite(min=2, max=15):
     time.sleep(wait_time + ms)
     
     
-def date_convert2BJT(date_str):
+def date_convert2BJT(date_str: str) -> str:
     if not date_str:
         return date.today().strftime("%Y-%m-%d")
     try:
@@ -47,7 +47,7 @@ def date_convert2BJT(date_str):
     return date_str  # 返回原始字符串以防万一
 
 
-def get_magnet_hash(magnet):
+def get_magnet_hash(magnet: str) -> str | None:
     if not magnet:
         return None
     # 匹配 hex (40) 或 base32 (32)
@@ -58,14 +58,14 @@ def get_magnet_hash(magnet):
     return None
 
 
-def check_magnet(magnet):
+def check_magnet(magnet: str) -> bool:
     pattern = r"^magnet:\?xt=urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})(?:&.*)?$"
     if not isinstance(magnet, str) or not magnet.startswith('magnet:'):
         return False
     return re.fullmatch(pattern, magnet) is not None
 
 
-def check_input(input_str):
+def check_input(input_str: str) -> int:
     """_summary_
     判断输入字符串的内容
     纯英文 返回 1
@@ -103,7 +103,7 @@ def check_input(input_str):
     return 0
 
 
-def clean_magnet(magnet_link):
+def clean_magnet(magnet_link: str) -> str:
     """
     Clean magnet link, remove trackers and other parameters, keep only xt.
     """

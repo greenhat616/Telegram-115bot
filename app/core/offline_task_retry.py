@@ -6,6 +6,7 @@ import asyncio
 import shutil
 from pathlib import Path
 from datetime import datetime
+from typing import Any
 from app.utils.sqlitelib import SqlLiteLib
 from app.utils.message_queue import add_task_to_queue
 from telegram.helpers import escape_markdown
@@ -13,7 +14,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from app.models.dto import PendingPushTask
 
 
-def wait_for_message_queue_completion(task_name="任务", timeout=0):
+def wait_for_message_queue_completion(task_name: str = "任务", timeout: int = 0) -> None:
     """
     等待消息队列中的所有任务完成（包括正在发送的消息）
     
@@ -57,7 +58,7 @@ def wait_for_message_queue_completion(task_name="任务", timeout=0):
         init.logger.info(f"所有{task_name}通知已发送完成（降级方案），开始清理流程")
 
 
-def offline_task_retry():
+def offline_task_retry() -> None:
     init.logger.info("开始涩花离线任务...")
     sehua_offline()
     init.logger.info("开始AV日更离线任务...")
@@ -68,7 +69,7 @@ def offline_task_retry():
     javbus_offline()
 
 
-def sehua_offline():
+def sehua_offline() -> None:
     save_path_list= []
     check_results = []
     sections = init.require_bot_config().sehua_spider.sections
@@ -197,7 +198,7 @@ def sehua_offline():
     del_images(images)
     
 
-def del_images(images):
+def del_images(images: list[str | None]) -> None:
     if not images:
         return
     for image_path in images:
@@ -210,7 +211,7 @@ def del_images(images):
     init.logger.info("所有临时图片文件已删除!")
     
                 
-def sehua_success_proccesser(item, save_path, task, success_list):
+def sehua_success_proccesser(item: dict[str, Any], save_path: str, task: dict[str, Any], success_list: list[int]) -> None:
     id = item['id']
     section_name = item['section_name']
     av_number = item['av_number']
@@ -281,7 +282,7 @@ def sehua_success_proccesser(item, save_path, task, success_list):
             
 
 
-def av_daily_offline():
+def av_daily_offline() -> None:
     update_list = []
     # 找到需要下载的AV
     with SqlLiteLib() as sqlite:
@@ -361,7 +362,7 @@ def av_daily_offline():
     init.require_openapi_115().clear_cloud_task()
     
     
-def av_daily_success_proccesser(item, task, save_path):
+def av_daily_success_proccesser(item: dict[str, Any], task: dict[str, Any], save_path: str) -> None:
     
     # 更新数据库状态
     with SqlLiteLib() as sqlite:
@@ -393,7 +394,7 @@ def av_daily_success_proccesser(item, task, save_path):
             push2aria2(f"{save_path}/{task['name']}", init.require_bot_config().allowed_user, item['post_url'], message)
 
 
-def offline2115(offline_tasks, task_count, save_path):
+def offline2115(offline_tasks: str, task_count: int, save_path: str) -> None:
     
     # 调用115的离线下载API
     offline_success = init.require_openapi_115().offline_download_specify_path(
@@ -406,7 +407,7 @@ def offline2115(offline_tasks, task_count, save_path):
 
     time.sleep(2)
 
-def create_offline_url(res_list):
+def create_offline_url(res_list: list[dict[str, Any]]) -> list[str]:
     offline_tasks = ""
     offline_tasks_list = []
     index = 0
@@ -430,7 +431,7 @@ def create_offline_url(res_list):
     return offline_tasks_list
 
 
-def create_offline_group_by_save_path(res_list):
+def create_offline_group_by_save_path(res_list: list[dict[str, Any]]) -> dict[str, list[str]]:
     """
     根据保存路径分组离线任务，每个路径下的任务不超过100个
     """
@@ -477,7 +478,7 @@ def create_offline_group_by_save_path(res_list):
     
     return result
 
-def push2aria2(save_path, user_id, cover_image, message):
+def push2aria2(save_path: str, user_id: int | str, cover_image: str, message: str) -> None:
     # 为Aria2推送创建任务ID系统
     import uuid
     push_task_id = str(uuid.uuid4())[:8]
@@ -493,7 +494,7 @@ def push2aria2(save_path, user_id, cover_image, message):
     add_task_to_queue(user_id, cover_image, message, reply_markup)
     
     
-def t66y_offline():
+def t66y_offline() -> None:
     save_path_list= []
     check_results = []
     
@@ -589,7 +590,7 @@ def t66y_offline():
     init.require_openapi_115().clear_cloud_task()
 
 
-def t66y_success_proccesser(item, save_path, task):
+def t66y_success_proccesser(item: dict[str, Any], save_path: str, task: dict[str, Any]) -> None:
     id = item['id']
     title = item['title']
     movie_info = item['movie_info']
@@ -631,7 +632,7 @@ def t66y_success_proccesser(item, save_path, task):
             push2aria2(f"{save_path}/{task['name']}", init.require_bot_config().allowed_user, poster_url, message)
 
 
-def javbus_offline():
+def javbus_offline() -> None:
     save_path_list= []
     check_results = []
     images = []
@@ -713,7 +714,7 @@ def javbus_offline():
     init.require_openapi_115().clear_cloud_task()
 
 
-def javbus_success_proccesser(item, save_path, task):
+def javbus_success_proccesser(item: dict[str, Any], save_path: str, task: dict[str, Any]) -> None:
     id = item['id']
     title = item['title']
     movie_info = item['movie_info']
@@ -737,7 +738,7 @@ def javbus_success_proccesser(item, save_path, task):
             push2aria2(f"{save_path}/{task['name']}", init.require_bot_config().allowed_user, poster_url, message)
             
             
-def generate_strm_file(result):
+def generate_strm_file(result: list[dict[str, Any]]) -> None:
     strm_mode = init.require_bot_config().strm_mode
     if strm_mode == 'disable':
         return
@@ -790,7 +791,7 @@ def generate_strm_file(result):
             init.logger.error(f"创建STRM文件失败 [{item.get('file_name', '')}]: {e}")
 
 
-def add_year_month_to_path(need_add, original_path):
+def add_year_month_to_path(need_add: bool, original_path: str) -> str:
     if not need_add:
         return original_path
     current_yearmonth = datetime.now().strftime("%Y%m")

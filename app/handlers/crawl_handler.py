@@ -1,3 +1,4 @@
+from typing import Any
 from telegram import Update
 from telegram.ext import ContextTypes, CommandHandler
 from app import init
@@ -56,7 +57,7 @@ async def crawl_jav(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
-def register_crawl_handlers(application):
+def register_crawl_handlers(application: Any) -> None:
     """crawl处理器注册函数"""
     crawl_sehua_handler = CommandHandler('csh', crawl_sehua)
     application.add_handler(crawl_sehua_handler)

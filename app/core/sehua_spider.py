@@ -27,7 +27,7 @@ from app.utils.http_client import http_request
 # 全局browser
 browser: SeleniumBrowser | None = None
 
-def _build_full_url(path: str):
+def _build_full_url(path: str) -> str:
     """根据 browser.base_url 构造完整 URL，避免重复添加协议头"""
     if not browser or not browser.base_url:
         return path
@@ -36,14 +36,14 @@ def _build_full_url(path: str):
         base = f"https://{base}"
     return f"{base}/{path.lstrip('/')}"
 
-def get_base_url():
+def get_base_url() -> str:
     base_url = init.require_bot_config().sehua_spider.base_url
     if not base_url:
         base_url = "www.sehuatang.net"
     return base_url
 
 
-async def download_image(image_url, save_path):
+async def download_image(image_url: str, save_path: str) -> tuple[bool, str]:
     """
     使用全局浏览器下载外链图片并保存到本地
     专门用于下载外部图片链接，使用最简单可靠的方法
@@ -136,7 +136,7 @@ async def download_image(image_url, save_path):
         init.logger.error(error_msg)
         return False, error_msg
 
-def get_section_id(section_name):
+def get_section_id(section_name: str) -> int:
     section_map = {
         "国产原创": 2,
         "亚洲无码原创": 36,
@@ -150,10 +150,11 @@ def get_section_id(section_name):
     return section_map.get(section_name, 0)
 
 
-async def sehua_spider_start_async():
+async def sehua_spider_start_async() -> None:
     """完整的爬虫启动函数，包含浏览器生命周期管理"""
     global browser
-    if not init.require_bot_config().sehua_spider.enable:
+    bot_config = init.require_bot_config()
+    if not bot_config.sehua_spider.enable:
         return
     # 初始化全局浏览器
     browser = SeleniumBrowser(get_base_url())
@@ -163,13 +164,13 @@ async def sehua_spider_start_async():
         await browser.init_browser()
 
         if not browser.driver:
-            add_task_to_queue(init.require_bot_config().allowed_user, None, f"❌ 浏览器初始化失败！")
+            add_task_to_queue(bot_config.allowed_user, None, f"❌ 浏览器初始化失败！")
             return
 
         await browser.pass_cloudflare_check()
         yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
         date = yesterday.strftime("%Y-%m-%d")
-        sections = init.require_bot_config().sehua_spider.sections
+        sections = bot_config.sehua_spider.sections
         for section in sections:
             section_name = section.name
             init.logger.info(f"开始爬取 {section_name} 分区...")
@@ -189,14 +190,14 @@ async def sehua_spider_start_async():
     init.logger.info("开始执行涩花离线任务...")
     sehua_offline()
 
-def sehua_spider_start():
+def sehua_spider_start() -> None:
     try:
         asyncio.run(sehua_spider_start_async())
     except Exception as e:
         init.logger.error(f"涩花爬虫启动失败: {e}")
         
         
-async def sehua_spider_by_date_async(date):
+async def sehua_spider_by_date_async(date: str) -> None:
     """完整的爬虫启动函数，包含浏览器生命周期管理"""
     global browser
     browser = SeleniumBrowser(get_base_url())
@@ -231,7 +232,7 @@ async def sehua_spider_by_date_async(date):
     sehua_offline()
     init.CRAWL_SEHUA_STATUS = 0
 
-def sehua_spider_by_date(date):
+def sehua_spider_by_date(date: str) -> None:
     try:
         asyncio.run(sehua_spider_by_date_async(date))
     except Exception as e:
@@ -239,7 +240,7 @@ def sehua_spider_by_date(date):
         init.CRAWL_SEHUA_STATUS = 0
     
     
-async def section_spider(section_name, date):
+async def section_spider(section_name: str, date: str) -> None:
     assert browser is not None
     update_list = await get_section_update(section_name, date)
     
@@ -324,7 +325,7 @@ async def section_spider(section_name, date):
         init.logger.info(f"本次爬取结束 - 成功: {successful_count}, 失败: {failed_count}")
         # 注意：这里不关闭浏览器，保持cookie
             
-async def parse_topic(section_name, html, url, date):
+async def parse_topic(section_name: str, html: str, url: str, date: str) -> dict[str, str | None]:
     soup = BeautifulSoup(html, "html.parser")
     result = {}
     result['section_name'] = section_name
@@ -381,7 +382,7 @@ async def parse_topic(section_name, html, url, date):
         
         # 下载图片到本地保存到tmp
         if result['post_url']:
-            success, local_path = await download_image(result['post_url'], f"{init.TEMP}/sehua")
+            success, local_path = await download_image(str(result['post_url']), f"{init.TEMP}/sehua")
             if success:
                 init.logger.debug(f"图片已下载到: {local_path}")
                 result['image_path'] = local_path
@@ -413,7 +414,7 @@ async def parse_topic(section_name, html, url, date):
     return result
 
 
-async def get_section_update(section_name, date):
+async def get_section_update(section_name: str, date: str) -> list[str]:
     assert browser is not None
     all_data_today = []
     section_id = get_section_id(section_name)
@@ -481,7 +482,7 @@ async def get_section_update(section_name, date):
     return all_data_today
 
 
-def parse_section_page(html_content, date, page_num, section_name):
+def parse_section_page(html_content: str, date: str, page_num: int, section_name: str) -> list[str]:
     topics = []
     soup = BeautifulSoup(html_content, "html.parser")
     
@@ -538,7 +539,7 @@ def parse_section_page(html_content, date, page_num, section_name):
     return topics
 
 
-async def age_check():
+async def age_check() -> None:
     assert browser is not None
     try:
         # 等待页面基本加载
@@ -592,7 +593,7 @@ async def age_check():
         # 继续执行，不因为年龄验证失败而中断
 
 
-async def safeid_check():
+async def safeid_check() -> None:
     """检查并处理 safeid 验证"""
     assert browser is not None
     try:
@@ -624,7 +625,7 @@ async def safeid_check():
     except Exception as e:
         init.logger.warn(f"safeid 处理出错: {e}")
 
-def extract_safeid(html):
+def extract_safeid(html: str) -> str | None:
     """提取 safeid"""
     try:
         pattern = r"var\s+safeid\s*=\s*['\"]([^'\"]+)['\"]"
@@ -637,7 +638,7 @@ def extract_safeid(html):
 
     
         
-def get_av_number_from_title(title):
+def get_av_number_from_title(title: str) -> str:
     av_number = ""
     if ' ' in title:
         parts = title.split(' ')
@@ -647,13 +648,13 @@ def get_av_number_from_title(title):
         av_number = tmp.upper()
     return av_number
 
-def get_image_name(image_url):
+def get_image_name(image_url: str) -> str:
     parsed = urlparse(image_url)
     filename = Path(parsed.path).name
     return filename
 
 
-def save_sehua2db(results):
+def save_sehua2db(results: list[dict[str, str | None]]) -> None:
     insert_count = 0
     try:
         with SqlLiteLib() as sqlite:
@@ -663,7 +664,7 @@ def save_sehua2db(results):
                 if not match_strategyed:
                     continue
                 # 检查是否已存在（通过磁力链接Hash判断，忽略tracker等参数差异）
-                magnet_hash = get_magnet_hash(result.get('magnet'))
+                magnet_hash = get_magnet_hash(str(result.get('magnet', '')))
                 if magnet_hash:
                     # 如果能提取到hash，使用模糊匹配查询
                     sql_check = "select count(*) from sehua_data where magnet LIKE ?"
@@ -693,7 +694,7 @@ def save_sehua2db(results):
                     init.logger.warn(f"数据不完整，跳过入库: {result}")
                     continue
                 
-                if check_magnet(result.get('magnet')) is False:
+                if check_magnet(str(result.get('magnet', ''))) is False:
                     init.logger.warn(f"[{result.get('magnet')}]磁力链接格式不正确，跳过入库!")
                     continue
                 
@@ -723,7 +724,7 @@ def save_sehua2db(results):
         init.logger.error(f"保存涩花数据到数据库时出错: {str(e)}")
         
         
-def is_title_allowed(section_name, title):
+def is_title_allowed(section_name: str, title: str) -> bool:
     yaml_path = init.STRATEGY_FILE
     strategy_config = read_yaml_file(yaml_path)
     if not strategy_config:
@@ -756,7 +757,7 @@ def is_title_allowed(section_name, title):
     return True
 
 
-def match_strategy(result):
+def match_strategy(result: dict[str, str | None]) -> tuple[bool, str | None]:
     yaml_path = init.STRATEGY_FILE
     strategy_config = read_yaml_file(yaml_path)
     if not strategy_config:
@@ -786,7 +787,7 @@ def match_strategy(result):
                 pattern = item.get('pattern', '')
                 if not pattern:
                     continue
-                if re.search(pattern, result.get('title', ''), re.IGNORECASE):
+                if re.search(str(pattern), str(result.get('title', '')), re.IGNORECASE):
                     strategy_name = item.get('strategy_name', item.get('name', '未知策略'))
                     init.logger.info(f"标题[{result.get('title', '')}]匹配正则[{strategy_name}]成功!")
                     # 正确处理空值：如果specify_save_path为空值，使用默认路径
@@ -800,7 +801,7 @@ def match_strategy(result):
     return True, result.get('save_path')
 
 
-def get_sehua_save_path(_section_name):
+def get_sehua_save_path(_section_name: str) -> str:
     sections = init.require_bot_config().sehua_spider.sections
     for section in sections:
         section_name = section.name

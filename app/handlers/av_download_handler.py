@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from typing import Any
 import asyncio
 from app.utils.http_client import http_request
 from bs4 import BeautifulSoup
@@ -7,7 +8,7 @@ from telegram.ext import ContextTypes, CommandHandler, ConversationHandler, Call
 from telegram.error import TelegramError
 import time
 from app import init
-from app.utils.ptb_helpers import require_message, require_query, require_chat, require_user, require_user_data
+from app.utils.ptb_helpers import require_message, require_query, require_chat, require_user, require_user_data, require_text, require_document, require_query_data, require_av_download_data
 from app.utils.message_queue import add_task_to_queue
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -22,7 +23,7 @@ download_executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="AV_Dow
 
 SELECT_MAIN_CATEGORY, SELECT_SUB_CATEGORY = range(60, 62)
 
-async def start_av_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start_av_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     usr_id = require_user(update).id
     if not init.check_user(usr_id):
         await require_message(update).reply_text("⚠️ 对不起，您无权使用115机器人！")
@@ -50,7 +51,7 @@ async def start_av_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return SELECT_MAIN_CATEGORY
 
 
-async def start_batch_download_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start_batch_download_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     usr_id = require_user(update).id
     if not init.check_user(usr_id):
         await require_message(update).reply_text("⚠️ 对不起，您无权使用115机器人！")
@@ -76,19 +77,18 @@ async def start_batch_download_command(update: Update, context: ContextTypes.DEF
                                    reply_markup=reply_markup)
     return SELECT_MAIN_CATEGORY
 
-async def download_from_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def download_from_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     usr_id = require_user(update).id
     if not init.check_user(usr_id):
         await require_message(update).reply_text(" 对不起，您无权使用115机器人！")
         return ConversationHandler.END
-    if (not require_message(update).document or 
-        not require_message(update).document.mime_type or  # ty:ignore[unresolved-attribute]
-        require_message(update).document.mime_type != 'text/plain'):  # ty:ignore[unresolved-attribute]
+    doc = require_message(update).document
+    if not doc or not doc.mime_type or doc.mime_type != 'text/plain':
         await require_message(update).reply_text("⚠️ 请发送一个TXT文本文件，文件中每行一个下载链接！")
         return ConversationHandler.END
-    
-    file = await context.bot.get_file(require_message(update).document.file_id)  # ty:ignore[unresolved-attribute]
-    if file.file_size > 20 * 1024 * 1024:  # 20MB  # ty:ignore[unsupported-operator]
+
+    file = await context.bot.get_file(doc.file_id)
+    if (file.file_size or 0) > 20 * 1024 * 1024:  # 20MB
         await require_message(update).reply_text("⚠️ 文件太大，请发送小于20MB的文件！")
         return ConversationHandler.END
      # 下载文件
@@ -113,7 +113,7 @@ async def download_from_file(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return SELECT_MAIN_CATEGORY
 
 
-async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = require_query(update)
     await query.answer()
     assert query.data is not None
@@ -127,21 +127,23 @@ async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYP
             user_id = require_user(update).id
             last_path = init.bot_session['av_last_save']
             # 批量磁力下载
-            if "dl_links" in require_user_data(context):
-                magnet_links = require_user_data(context)["dl_links"]
-                await query.edit_message_text(f"✅ 已为您添加{len(magnet_links.splitlines())}个链接到下载队列！\n请稍后...")  # ty:ignore[unresolved-attribute]
+            data = require_av_download_data(context)
+            if "dl_links" in data:
+                magnet_links = str(data["dl_links"])
+                await query.edit_message_text(f"✅ 已为您添加{len(magnet_links.splitlines())}个链接到下载队列！\n请稍后...")
                 download_executor.submit(batch_download_task, magnet_links, last_path, user_id)
                 return ConversationHandler.END
             else:
-                av_number = require_user_data(context)["av_number"]
-                require_user_data(context)["selected_path"] = last_path
-                
+                av_data = require_av_download_data(context)
+                av_number = str(av_data["av_number"])
+                av_data["selected_path"] = last_path
+
                 # 抓取磁力（移至线程池避免阻塞主事件循环）
                 await query.edit_message_text(f"🔍 正在搜索 [{av_number}] 的磁力链接...")
                 av_result = await asyncio.to_thread(get_av_result, av_number)
 
                 if not av_result:
-                    await query.edit_message_text(f"😵‍💫很遗憾，没有找到{av_number.upper()}的对应磁力~")  # ty:ignore[unresolved-attribute]
+                    await query.edit_message_text(f"😵‍💫很遗憾，没有找到{av_number.upper()}的对应磁力~")
                     return ConversationHandler.END
 
                 # 立即反馈用户
@@ -172,7 +174,7 @@ async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYP
         return SELECT_SUB_CATEGORY
 
 
-async def select_sub_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def select_sub_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = require_query(update)
     await query.answer()
 
@@ -180,26 +182,28 @@ async def select_sub_category(update: Update, context: ContextTypes.DEFAULT_TYPE
     selected_path = query.data
     if selected_path == "cancel":
         return await quit_conversation(update, context)
-    
-    require_user_data(context)["selected_path"] = selected_path
+    assert selected_path is not None
+
+    data = require_av_download_data(context)
+    data["selected_path"] = selected_path
     user_id = require_user(update).id
-    
+
     # 保存最后一次使用的路径
-    init.bot_session['av_last_save'] = selected_path  # ty:ignore[invalid-assignment]
-    
-    if "dl_links" in require_user_data(context):
-        magnet_links = require_user_data(context)["dl_links"]
-        await query.edit_message_text(f"✅ 已为您添加{len(magnet_links.splitlines())}个链接到下载队列！\n请稍后...")  # ty:ignore[unresolved-attribute]
+    init.bot_session['av_last_save'] = selected_path
+
+    if "dl_links" in data:
+        magnet_links = str(data["dl_links"])
+        await query.edit_message_text(f"✅ 已为您添加{len(magnet_links.splitlines())}个链接到下载队列！\n请稍后...")
         download_executor.submit(batch_download_task, magnet_links, selected_path, user_id)
         return ConversationHandler.END
     else:
-        av_number = require_user_data(context)["av_number"]
+        av_number = str(data["av_number"])
         # 抓取磁力（移至线程池避免阻塞主事件循环）
         await query.edit_message_text(f"🔍 正在搜索 [{av_number}] 的磁力链接...")
         av_result = await asyncio.to_thread(get_av_result, av_number)
 
         if not av_result:
-            await query.edit_message_text(f"😵‍💫很遗憾，没有找到{[av_number.upper()]}的对应磁力~")  # ty:ignore[unresolved-attribute]
+            await query.edit_message_text(f"😵‍💫很遗憾，没有找到{av_number.upper()}的对应磁力~")
             return ConversationHandler.END
         
         # 立即反馈用户
@@ -211,7 +215,7 @@ async def select_sub_category(update: Update, context: ContextTypes.DEFAULT_TYPE
         return ConversationHandler.END
 
 
-async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # 检查是否是回调查询
     if update.callback_query:
         await update.callback_query.edit_message_text(text="🚪用户退出本次会话")
@@ -220,7 +224,7 @@ async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-def get_av_result(av_number):
+def get_av_result(av_number: str) -> list[dict[str, str]]:
     result = []
     url = f"https://sukebei.nyaa.si/?q={av_number}&f=0&c=0_0"
     response = http_request("GET", url, timeout=(10, 30))
@@ -242,7 +246,7 @@ def get_av_result(av_number):
         })
     return result
 
-def download_task(av_result, av_number, save_path, user_id):
+def download_task(av_result: list[dict[str, str]], av_number: str, save_path: str, user_id: int) -> None:
     """异步下载任务"""
     magnet = ""
     info_hash = ""
@@ -304,7 +308,7 @@ def download_task(av_result, av_number, save_path, user_id):
         # 清空离线任务
         init.require_openapi_115().del_offline_task(info_hash, del_source_file=0)
         
-def push2aria2(save_path, user_id, cover_image, message):
+def push2aria2(save_path: str, user_id: int, cover_image: str, message: str) -> None:
     # 为Aria2推送创建任务ID系统
     import uuid
     push_task_id = str(uuid.uuid4())[:8]
@@ -320,7 +324,7 @@ def push2aria2(save_path, user_id, cover_image, message):
     add_task_to_queue(user_id, cover_image, message, reply_markup)
     
 
-def batch_download_task(magnet_links, save_path, user_id):
+def batch_download_task(magnet_links: str, save_path: str, user_id: int) -> None:
     """批量下载任务"""
     all_links = magnet_links.splitlines()
     valid_links = []
@@ -386,7 +390,7 @@ def batch_download_task(magnet_links, save_path, user_id):
     init.require_openapi_115().clear_cloud_task()
                     
 
-def split_list_compact(original_list, chunk_size=100):
+def split_list_compact(original_list: list, chunk_size: int = 100) -> list[list]:
     """
     使用列表推导式分割列表
     """
@@ -409,7 +413,7 @@ def is_valid_link(link: str) -> str:
 
     return "unknown"
 
-def check_file(text_content):
+def check_file(text_content: str) -> str:
     links = []
     for line in text_content.splitlines():
         line = line.strip()
@@ -420,7 +424,7 @@ def check_file(text_content):
             links.append(line)
     return "\n".join(links)   
 
-def register_av_download_handlers(application):
+def register_av_download_handlers(application: Any) -> None:
     # download下载交互
     download_handler = ConversationHandler(
         entry_points=[CommandHandler("av", start_av_command),

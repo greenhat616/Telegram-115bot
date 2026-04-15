@@ -4,12 +4,14 @@ import re
 import time
 import os
 import json
+from typing import Any, Callable
 from concurrent.futures import ThreadPoolExecutor
 from selenium.webdriver.common.by import By
 from selenium import webdriver
+from selenium.webdriver.remote.webdriver import WebDriver
 from app.utils.http_client import http_request_long
 from app import init
-from seleniumbase import SB
+from seleniumbase import SB, BaseCase
 import subprocess
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -21,16 +23,17 @@ FLARESOLVERR_URL = os.getenv("FLARESOLVERR_URL", "http://flaresolverr:8191/v1")
 REMOTE_SELENIUM_URL = os.getenv("REMOTE_SELENIUM_URL", None)
 
 class SeleniumBrowser:
-    def __init__(self, base_url=None):
-        self.base_url = base_url
-        self.driver = None
-        self.sb_context = None
-        self.executor = ThreadPoolExecutor(max_workers=1)
+    def __init__(self, base_url: str | None = None) -> None:
+        self.base_url: str | None = base_url
+        self.driver: WebDriver | None = None
+        self.sb_context: Any = None
+        self.sb: BaseCase | None = None
+        self.executor: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1)
 
-    async def init_browser(self):
+    async def init_browser(self) -> None:
         await asyncio.get_running_loop().run_in_executor(self.executor, self._init_driver)
 
-    def _init_driver(self):
+    def _init_driver(self) -> None:
         # 保留 sehua 目录 (用于存放持久化数据)，删除其他所有内容
         try:
             if os.path.exists(init.TEMP):
@@ -137,11 +140,11 @@ class SeleniumBrowser:
 
         init.logger.error("SeleniumBase 浏览器所有模式初始化均失败")
 
-    async def close(self):
+    async def close(self) -> None:
         try:
             init.logger.info("正在关闭浏览器并清理环境...")
             
-            def _close_sync():
+            def _close_sync() -> None:
                 # 1. 优先使用 SeleniumBase Context 退出
                 if self.sb_context:
                     try:
@@ -188,10 +191,10 @@ class SeleniumBrowser:
             self.driver = None
             self.sb_context = None
 
-    async def goto(self, url):
+    async def goto(self, url: str) -> None:
         await asyncio.get_running_loop().run_in_executor(self.executor, self._goto_sync, url)
 
-    def _goto_sync(self, url):
+    def _goto_sync(self, url: str) -> None:
         if self.driver:
             try:
                 self.driver.get(url)
@@ -199,25 +202,25 @@ class SeleniumBrowser:
             except Exception as e:
                 init.logger.warn(f"Selenium导航失败: {e}")
 
-    async def get_page_source(self):
+    async def get_page_source(self) -> str:
         return await asyncio.get_running_loop().run_in_executor(self.executor, lambda: self.driver.page_source if self.driver else "")
 
-    async def get_cookies(self):
+    async def get_cookies(self) -> list[dict[str, Any]]:
         return await asyncio.get_running_loop().run_in_executor(self.executor, lambda: self.driver.get_cookies() if self.driver else [])
 
-    async def get_current_url(self):
+    async def get_current_url(self) -> str:
         return await asyncio.get_running_loop().run_in_executor(self.executor, lambda: self.driver.current_url if self.driver else "")
 
-    async def execute_script(self, script, *args):
+    async def execute_script(self, script: str, *args: Any) -> Any:
         return await asyncio.get_running_loop().run_in_executor(self.executor, lambda: self.driver.execute_script(script, *args) if self.driver else None)
 
-    async def execute_async_script(self, script, *args):
+    async def execute_async_script(self, script: str, *args: Any) -> Any:
         return await asyncio.get_running_loop().run_in_executor(self.executor, lambda: self.driver.execute_async_script(script, *args) if self.driver else None)
 
-    async def click_text(self, text):
+    async def click_text(self, text: str) -> None:
         await asyncio.get_running_loop().run_in_executor(self.executor, self._click_text_sync, text)
 
-    def _click_text_sync(self, text):
+    def _click_text_sync(self, text: str) -> None:
         if not self.driver: return
         try:
             # Try xpath
@@ -227,19 +230,19 @@ class SeleniumBrowser:
         except Exception as e:
             init.logger.debug(f"点击文本 '{text}' 失败: {e}")
 
-    async def wait_for_element(self, selector, by=By.CSS_SELECTOR, timeout=30):
+    async def wait_for_element(self, selector: str, by: str = By.CSS_SELECTOR, timeout: int = 30) -> None:
         await asyncio.get_running_loop().run_in_executor(self.executor, self._wait_for_element_sync, selector, by, timeout)
 
-    def _wait_for_element_sync(self, selector, by, timeout):
+    def _wait_for_element_sync(self, selector: str, by: str, timeout: int) -> None:
         if not self.driver: return
         try:
             WebDriverWait(self.driver, timeout).until(EC.presence_of_element_located((by, selector)))
         except: pass
 
-    async def pass_cloudflare_check(self):
+    async def pass_cloudflare_check(self) -> None:
         await asyncio.get_running_loop().run_in_executor(self.executor, self._pass_cloudflare_check_sync)
 
-    def _pass_cloudflare_check_sync(self):
+    def _pass_cloudflare_check_sync(self) -> None:
         if not self.driver:
             return
 
@@ -319,6 +322,6 @@ class SeleniumBrowser:
         except Exception as e:
             init.logger.warn(f"Cloudflare 验证处理出错: {e}")
 
-    async def run_with_driver(self, func, *args):
+    async def run_with_driver(self, func: Callable[..., Any], *args: Any) -> Any:
         """在 executor 中运行同步函数，并将 driver 作为第一个参数传入"""
         return await asyncio.get_running_loop().run_in_executor(self.executor, func, self.driver, *args)

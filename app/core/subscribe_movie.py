@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from typing import Any
 from app import init
 from bs4 import BeautifulSoup
 import time
@@ -11,7 +12,7 @@ from app.utils.cover_capture import get_movie_cover
 from telegram.helpers import escape_markdown
 
 
-def get_tmdb_id(movie_name, page=1):
+def get_tmdb_id(movie_name: str, page: int = 1) -> str | None:
     """
     从TMDB获取电影ID
     :param movie_name: 电影名称
@@ -70,7 +71,7 @@ def get_tmdb_id(movie_name, page=1):
         return None
     
 
-def schedule_movie():
+def schedule_movie() -> None:
     with SqlLiteLib() as sqlite:
         try:
             # 查询需要处理的数据
@@ -94,7 +95,7 @@ def schedule_movie():
             return
         
         
-def search_update(tmdb_id):
+def search_update(tmdb_id: str) -> str | None:
     # 优先ed2k
     url = f"https://api.nullbr.eu.org/movie/{tmdb_id}/ed2k"
     res = get_response_from_api(url)
@@ -114,16 +115,16 @@ def search_update(tmdb_id):
     return None
 
 
-def update_sub_movie(tmdb_id, highest_score_item):
+def update_sub_movie(tmdb_id: str, highest_score_item: dict[str, str]) -> None:
     movie_name = get_moive_name(tmdb_id)
-    post_url = get_movie_cover(movie_name)
+    post_url = get_movie_cover(movie_name or "")
     with SqlLiteLib() as sqlite:
         sql = "update sub_movie set download_url=?, post_url=?, size=? where is_delete = 0 and tmdb_id=?"
         params = (highest_score_item['download_url'], post_url, highest_score_item['size'], tmdb_id)
         sqlite.execute_sql(sql, params)
         
         
-def get_moive_name(tmdb_id):
+def get_moive_name(tmdb_id: str) -> str | None:
     with SqlLiteLib() as sqlite:
         sql = "select movie_name from sub_movie where is_delete = 0 and tmdb_id=?"
         params = (tmdb_id,)
@@ -133,7 +134,8 @@ def get_moive_name(tmdb_id):
         else:
             return None
 
-def check_condition(res, key):
+def check_condition(res: dict[str, list[dict[str, Any]]], key: str) -> dict[str, Any] | None:
+    config = init.require_bot_config()
     download_url = ""
     res_list = []
     for item in res[key]:
@@ -152,24 +154,24 @@ def check_condition(res, key):
             if isinstance(quality, str):
                 if "Dolby Vision" == quality or "dolby vision" == quality.lower():
                     is_dolby_vision = True
-        if init.require_bot_config().sub_condition.dolby_vision and is_dolby_vision:
+        if config.sub_condition.dolby_vision and is_dolby_vision:
             score += 10
         if zh_sub == 1:
              score += 10
-        for index, cfg_resolution in enumerate(init.require_bot_config().sub_condition.resolution_priority, 0):
+        for index, cfg_resolution in enumerate(config.sub_condition.resolution_priority, 0):
             if resolution:
                 if str(cfg_resolution) in resolution or str(cfg_resolution) in movie_name:
-                    score += len(init.require_bot_config().sub_condition.resolution_priority) - index
+                    score += len(config.sub_condition.resolution_priority) - index
             else:
                 if str(cfg_resolution) in movie_name:
-                    score += len(init.require_bot_config().sub_condition.resolution_priority) - index
+                    score += len(config.sub_condition.resolution_priority) - index
         res_list.append({'score': score, 'download_url': download_url, 'size': size, 'zh_sub': zh_sub, 'is_dolby_vision': is_dolby_vision})
     if res_list:
         # 按分数从高到低排序
         sorted_res_list = sorted(res_list, key=lambda x: x['score'], reverse=True)
         highest_score_item = None
         for item in sorted_res_list:
-            if init.require_bot_config().sub_condition.dolby_vision:
+            if config.sub_condition.dolby_vision:
                 # 必须同时满足杜比卫视和中字
                 if item['zh_sub'] == 0 or item['is_dolby_vision'] == False:
                     continue
@@ -182,7 +184,7 @@ def check_condition(res, key):
     return None
 
 
-def get_response_from_api(url):
+def get_response_from_api(url: str) -> Any:
     headers = {
         "User-Agent": init.USER_AGENT,
         "X-APP-ID": init.require_bot_config().x_app_id,
@@ -192,32 +194,33 @@ def get_response_from_api(url):
     return response.json()
 
 
-def download_from_link(download_url, movie_name, save_path):
+def download_from_link(download_url: str, movie_name: str, save_path: str) -> bool | None:
     info_hash = ""
-    try: 
+    api = init.require_openapi_115()
+    try:
         # 调用离线下载API，捕获可能的异常
-        offline_success = init.require_openapi_115().offline_download_specify_path(download_url, save_path)
+        offline_success = api.offline_download_specify_path(download_url, save_path)
         if not offline_success:
             init.logger.error(f"❌ 离线遇到错误！")
         else:
             init.logger.info(f"✅ [`{download_url}`]添加离线成功")
-            download_success, resource_name, info_hash = init.require_openapi_115().check_offline_download_success(download_url)
+            download_success, resource_name, info_hash = api.check_offline_download_success(download_url)
             if download_success:
                 init.logger.info(f"✅ [{resource_name}]离线下载完成")
                 time.sleep(1)
-                if init.require_openapi_115().is_directory(f"{save_path}/{resource_name}"):
+                if api.is_directory(f"{save_path}/{resource_name}"):
                     # 清除垃圾文件
-                    init.require_openapi_115().auto_clean_all(f"{save_path}/{resource_name}")
+                    api.auto_clean_all(f"{save_path}/{resource_name}")
                     # 重名名资源
-                    init.require_openapi_115().rename(f"{save_path}/{resource_name}", movie_name)
+                    api.rename(f"{save_path}/{resource_name}", movie_name)
                 else:
                     # 创建文件夹
-                    init.require_openapi_115().create_dir_for_file(f"{save_path}", movie_name)
+                    api.create_dir_for_file(f"{save_path}", movie_name)
                     # 移动文件到电影文件夹
-                    init.require_openapi_115().move_file(f"{save_path}/{resource_name}", f"{save_path}/{movie_name}")
+                    api.move_file(f"{save_path}/{resource_name}", f"{save_path}/{movie_name}")
 
                 # 读取目录下所有文件
-                file_list = init.require_openapi_115().get_files_from_dir(f"{save_path}/{movie_name}")
+                file_list = api.get_files_from_dir(f"{save_path}/{movie_name}")
                 # 创建软链
                 create_strm_file(f"{save_path}/{movie_name}", file_list)
                 # 通知Emby扫库
@@ -225,7 +228,7 @@ def download_from_link(download_url, movie_name, save_path):
                 return True
             else:
                 # 下载超时删除任务
-                init.require_openapi_115().del_offline_task(info_hash)
+                api.del_offline_task(info_hash)
                 init.logger.warn(f"😭离线下载超时，稍后将再次尝试!")
                 return False
     except Exception as e:
@@ -235,10 +238,10 @@ def download_from_link(download_url, movie_name, save_path):
         return False
     finally:
         # 清除云端任务，避免重复下载
-        init.require_openapi_115().del_offline_task(info_hash, del_source_file=0)
+        api.del_offline_task(info_hash, del_source_file=0)
     
     
-def send_message2usr(tmdb_id, sqlite):
+def send_message2usr(tmdb_id: str, sqlite: SqlLiteLib) -> None:
     try:
         query = "select sub_user,download_url,size,movie_name,post_url,category_folder from sub_movie where is_delete = 0 and tmdb_id=?"
         params = (tmdb_id,)
@@ -264,7 +267,7 @@ def send_message2usr(tmdb_id, sqlite):
         init.logger.error(f"电影[{movie_name}] 添加到队列失败: {e}")
     
     
-def is_subscribe(movie_name):
+def is_subscribe(movie_name: str) -> bool | None:
     tmdb_id = get_tmdb_id(movie_name)
     if tmdb_id:
         with SqlLiteLib() as sqlite:
@@ -276,7 +279,7 @@ def is_subscribe(movie_name):
             else:
                 return False
 
-def update_subscribe(movie_name, post_url, download_url):
+def update_subscribe(movie_name: str, post_url: str, download_url: str) -> None:
     tmdb_id = get_tmdb_id(movie_name)
     if tmdb_id:
         with SqlLiteLib() as sqlite:

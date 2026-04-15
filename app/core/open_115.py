@@ -17,6 +17,7 @@ import random
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from functools import wraps
+from typing import Any, Callable
 from app.utils.message_queue import add_task_to_queue
 from app.utils.alioss import upload_file_to_oss
 from telegram.helpers import escape_markdown
@@ -27,12 +28,13 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
     wait_random,
+    RetryCallState,
 )
 
 RISK_THRESHOLD = 0.95
 
 
-def _retryable_httpx_exception(exc):
+def _retryable_httpx_exception(exc: BaseException) -> bool:
     return isinstance(exc, (
         httpx.ConnectError,
         httpx.TimeoutException,
@@ -41,21 +43,23 @@ def _retryable_httpx_exception(exc):
     ))
 
 
-def _retryable_5xx_result(result):
+def _retryable_5xx_result(result: Any) -> bool:
     """仅匹配 HTTP 5xx 状态码，不匹配 115 业务错误码（如 40140125）"""
     return isinstance(result, dict) and result.get("_http_status", 0) in (500, 502, 503, 504)
 
 
-def _return_last_outcome(retry_state):
+def _return_last_outcome(retry_state: RetryCallState) -> Any:
     """重试耗尽后返回最后结果而非 RetryError"""
-    if retry_state.outcome.failed:
-        raise retry_state.outcome.exception()
-    return retry_state.outcome.result()
+    outcome = retry_state.outcome
+    assert outcome is not None
+    if outcome.failed:
+        raise outcome.exception()  # ty:ignore[invalid-raise]
+    return outcome.result()
 
-def handle_token_expiry(func):
+def handle_token_expiry(func: Callable[..., Any]) -> Callable[..., Any]:
     """装饰器：仅处理 token 过期（40140125），网络异常由 _make_api_request 的 tenacity 处理"""
     @wraps(func)
-    def wrapper(self, *args, **kwargs):
+    def wrapper(self: "OpenAPI_115", *args: Any, **kwargs: Any) -> Any:
         response = func(self, *args, **kwargs)
         if isinstance(response, dict) and response.get('code') == 40140125:
             init.logger.info("Token需要刷新，正在刷新后重试...")
@@ -81,19 +85,19 @@ def handle_token_expiry(func):
 
 
 class OpenAPI_115:
-    def __init__(self):
-        self.access_token = ""
-        self.refresh_token = ""
-        self.base_url = "https://proapi.115.com"
-        self.lifetime_vip = False
-        self.request_count = 0
-        self.lock = threading.Lock()
-        self.last_req_time = 0
-        self.file_info_cache = {}
-        self.cache_hit = 0
+    def __init__(self) -> None:
+        self.access_token: str = ""
+        self.refresh_token: str = ""
+        self.base_url: str = "https://proapi.115.com"
+        self.lifetime_vip: bool = False
+        self.request_count: int = 0
+        self.lock: threading.Lock = threading.Lock()
+        self.last_req_time: float = 0
+        self.file_info_cache: dict[str, Any] = {}
+        self.cache_hit: int = 0
         self.get_token()  # 初始化时获取token
         
-    def get_token(self):
+    def get_token(self) -> None:
         if not self.refresh_token or not self.access_token:
             if not os.path.exists(init.TOKEN_FILE):
                 app_id = init.require_bot_config().app_115_id
@@ -117,7 +121,7 @@ class OpenAPI_115:
                 self.refresh_token = tokens.get('refresh_token', '')
         
         
-    def auth_pkce(self, sub_user, app_id):
+    def auth_pkce(self, sub_user: int | str, app_id: str) -> None:
         header = {
             "Content-Type": "application/x-www-form-urlencoded",
             "User-Agent": init.USER_AGENT
@@ -198,7 +202,7 @@ class OpenAPI_115:
                             break
               
                         
-    def _load_token_from_file(self):
+    def _load_token_from_file(self) -> tuple[str, str]:
         if os.path.exists(init.TOKEN_FILE):
             try:
                 with open(init.TOKEN_FILE, 'r', encoding='utf-8') as f:
@@ -214,13 +218,13 @@ class OpenAPI_115:
         retry=retry_if_exception(_retryable_httpx_exception),
         reraise=True,
     )
-    def _refresh_token_request(self, url, headers, data):
+    def _refresh_token_request(self, url: str, headers: dict[str, str], data: dict[str, str]) -> httpx.Response:
         response = httpx.post(url, headers=headers, data=data, timeout=httpx.Timeout(30.0, connect=5.0))
         if response.status_code >= 500:
             response.raise_for_status()
         return response
 
-    def refresh_access_token(self):
+    def refresh_access_token(self) -> None:
         # 1. 尝试从文件加载最新Token
         file_access_token, file_refresh_token = self._load_token_from_file()
         
@@ -273,13 +277,13 @@ class OpenAPI_115:
             raise Exception(f"Failed to refresh access token: {res.get('message', 'unknown error')}")
         
 
-    def _get_headers(self):
+    def _get_headers(self) -> dict[str, str]:
         return {
             "Authorization": f"Bearer {self.access_token}",
             "User-Agent": init.USER_AGENT
         }
 
-    def _acquire_request_slot(self):
+    def _acquire_request_slot(self) -> dict[str, Any] | None:
         """获取请求槽位（限流 + 风控）"""
         with self.lock:
             if self.check_risk():
@@ -298,7 +302,7 @@ class OpenAPI_115:
         retry_error_callback=_return_last_outcome,
         reraise=False,
     )
-    def _make_api_request(self, method: str, url: str, params=None, data=None, headers=None):
+    def _make_api_request(self, method: str, url: str, params: dict[str, Any] | None = None, data: dict[str, Any] | None = None, headers: dict[str, str] | None = None) -> dict[str, Any]:
         """统一的API请求方法，每次 attempt（含重试）都重新走限流"""
         risk_resp = self._acquire_request_slot()
         if risk_resp:
@@ -317,7 +321,7 @@ class OpenAPI_115:
         return {"code": response.status_code, "message": response.text, "_http_status": response.status_code}
     
     @handle_token_expiry
-    def get_file_info(self, path: str):
+    def get_file_info(self, path: str) -> dict[str, Any] | None:
         # 优先从缓存获取
         if path in self.file_info_cache:
             data = self.file_info_cache[path]
@@ -344,7 +348,7 @@ class OpenAPI_115:
             return None
         
     @handle_token_expiry
-    def get_file_info_by_id(self, file_id: str):
+    def get_file_info_by_id(self, file_id: str) -> dict[str, Any] | None:
         url = f"{self.base_url}/open/folder/get_info"
         params = {"file_id": file_id}
         response = self._make_api_request('GET', url, params=params)
@@ -360,7 +364,7 @@ class OpenAPI_115:
             return None
     
     @handle_token_expiry
-    def offline_download(self, download_url):
+    def offline_download(self, download_url: str) -> bool | dict[str, Any] | None:
         url = f"{self.base_url}/open/offline/add_task_urls"
         file_info = self.get_file_info(init.require_bot_config().offline_path)
         if not file_info:
@@ -382,7 +386,7 @@ class OpenAPI_115:
             return None
     
     @handle_token_expiry
-    def offline_download_specify_path(self, download_url, save_path):
+    def offline_download_specify_path(self, download_url: str, save_path: str) -> bool | dict[str, Any]:
         save_path = os.path.normpath(save_path)
         url = f"{self.base_url}/open/offline/add_task_urls"
         file_info = self.get_file_info(save_path)
@@ -415,7 +419,7 @@ class OpenAPI_115:
             raise Exception(response['message'])
 
     # @handle_token_expiry
-    def get_offline_tasks_by_page(self, page=1):
+    def get_offline_tasks_by_page(self, page: int = 1) -> dict[str, Any] | None:
         url = f"{self.base_url}/open/offline/get_task_list"
         params = {"page": page}
         response = self._make_api_request('GET', url, params=params)
@@ -429,7 +433,7 @@ class OpenAPI_115:
             return None
     
     @handle_token_expiry
-    def get_offline_tasks(self):
+    def get_offline_tasks(self) -> list[dict[str, Any]] | dict[str, Any] | None:
         url = f"{self.base_url}/open/offline/get_task_list"
         response = self._make_api_request('GET', url)
         task_list = []
@@ -460,7 +464,7 @@ class OpenAPI_115:
     
     
     @handle_token_expiry
-    def del_offline_task(self, info_hash, del_source_file=1):
+    def del_offline_task(self, info_hash: str, del_source_file: int = 1) -> bool | dict[str, Any] | None:
         url = f"{self.base_url}/open/offline/del_task"
         data = {
             "info_hash": info_hash,
@@ -480,7 +484,7 @@ class OpenAPI_115:
             return None
         
     @handle_token_expiry
-    def copy_file(self, source_path, target_path, nodupli=1):
+    def copy_file(self, source_path: str, target_path: str, nodupli: int = 1) -> bool | dict[str, Any] | None:
         """复制文件或目录"""
         src_file_info = self.get_file_info(source_path)
         if not src_file_info:
@@ -511,7 +515,7 @@ class OpenAPI_115:
         return None
     
     @handle_token_expiry      
-    def rename(self, old_name, new_name):
+    def rename(self, old_name: str, new_name: str) -> bool | dict[str, Any] | None:
         """重命名文件或目录"""
         file_info = self.get_file_info(old_name)
         if not file_info:
@@ -554,7 +558,7 @@ class OpenAPI_115:
             return None
         
     @handle_token_expiry
-    def rename_by_id(self, file_id, old_name, new_name):
+    def rename_by_id(self, file_id: str, old_name: str, new_name: str) -> bool | dict[str, Any] | None:
         """重命名文件或目录"""
         url = f"{self.base_url}/open/ufile/update"
         data = {
@@ -589,7 +593,7 @@ class OpenAPI_115:
             return None
             
     @handle_token_expiry
-    def get_file_list(self, params):
+    def get_file_list(self, params: dict[str, Any]) -> Any:
         """获取指定目录下的所有文件"""
         url = f"{self.base_url}/open/ufile/files"
         response = self._make_api_request('GET', url, params=params, headers=self._get_headers())
@@ -604,7 +608,7 @@ class OpenAPI_115:
             return None
         
     @handle_token_expiry
-    def create_directory(self, pid, file_name):
+    def create_directory(self, pid: int | str, file_name: str) -> dict[str, Any] | bool | None:
         """创建目录"""
         url = f"{self.base_url}/open/folder/add"
         # 恢复使用 file_name，因为之前是工作的
@@ -637,7 +641,7 @@ class OpenAPI_115:
             return None
         
     @handle_token_expiry
-    def delet_file(self, file_ids):
+    def delet_file(self, file_ids: str) -> bool | dict[str, Any] | None:
         """删除文件或目录"""
         url = f"{self.base_url}/open/ufile/delete"
         data = {
@@ -653,7 +657,7 @@ class OpenAPI_115:
                 return response
             return None
     
-    def _batch_delete_files(self, fid_list, batch_size=100):
+    def _batch_delete_files(self, fid_list: list[str], batch_size: int = 100) -> None:
         """分批删除文件，避免单次请求过长
         
         Args:
@@ -689,7 +693,7 @@ class OpenAPI_115:
         time.sleep(10)
         
     @handle_token_expiry
-    def delete_single_file(self, path):
+    def delete_single_file(self, path: str) -> bool | dict[str, Any] | None:
         """删除单个文件"""
         file_info = self.get_file_info(path)
         if not file_info:
@@ -712,7 +716,7 @@ class OpenAPI_115:
             return None
 
     @handle_token_expiry
-    def upload_file(self, **kwargs):
+    def upload_file(self, **kwargs: Any) -> tuple[bool, bool] | None:
         """上传文件"""
         target = kwargs.get('target') 
         file_info = self.get_file_info(target)
@@ -815,7 +819,7 @@ class OpenAPI_115:
     
     
     @handle_token_expiry
-    def get_upload_token(self):
+    def get_upload_token(self) -> dict[str, Any] | None:
         """获取上传文件的token"""
         url = f"{self.base_url}/open/upload/get_token"
         response = self._make_api_request('GET', url)
@@ -831,7 +835,7 @@ class OpenAPI_115:
     
         
     @handle_token_expiry
-    def get_user_info(self):
+    def get_user_info(self) -> dict[str, Any] | None:
         """获取用户信息"""
         url = f"{self.base_url}/open/user/info"
         response = self._make_api_request('GET', url)
@@ -846,7 +850,7 @@ class OpenAPI_115:
             return None
         
     @handle_token_expiry
-    def get_quota_info(self):
+    def get_quota_info(self) -> dict[str, Any] | None:
         """获取配额信息"""
         url = f"{self.base_url}/open/offline/get_quota_info"
         response = self._make_api_request('GET', url)
@@ -861,7 +865,7 @@ class OpenAPI_115:
             return None
         
     @handle_token_expiry
-    def get_file_play_url(self, file_path):
+    def get_file_play_url(self, file_path: str) -> str | dict[str, Any] | None:
         file_info = self.get_file_info(file_path)
         if not file_info:
             return None
@@ -891,7 +895,7 @@ class OpenAPI_115:
         return None
     
     @handle_token_expiry
-    def get_file_download_url(self, file_path):
+    def get_file_download_url(self, file_path: str) -> list[str] | dict[str, Any]:
         """获取文件下载链接"""
         file_info = self.get_file_info(file_path)
         file_id = file_info['file_id']
@@ -922,7 +926,7 @@ class OpenAPI_115:
     
     
     @handle_token_expiry
-    def clear_cloud_task(self, flag=0):
+    def clear_cloud_task(self, flag: int = 0) -> bool | dict[str, Any] | None:
         url = f"{self.base_url}/open/offline/clear_task"
         # 清除任务类型：0清空已完成、1清空全部、2清空失败、3清空进行中、4清空已完成任务并清空对应源文件、5清空全部任务并清空对应源文件
         data = {
@@ -938,7 +942,7 @@ class OpenAPI_115:
                 return response
             return None
         
-    def move_file(self, source_path, target_path):
+    def move_file(self, source_path: str, target_path: str) -> bool:
         """移动文件或目录"""
         # copy_file 实际上是把文件复制到 target_path 目录下
         # 所以新文件的全路径是 target_path/basename(source_path)
@@ -974,12 +978,12 @@ class OpenAPI_115:
             init.logger.warn(f"移动文件失败: 复制文件失败")
             return False
     
-    def clear_request_count(self):
+    def clear_request_count(self) -> None:
         """清除请求计数"""
         self.request_count = 0
         self.cache_hit = 0
         
-    def welcome_message(self):
+    def welcome_message(self) -> tuple[str, str, str, str]:
         """欢迎消息"""
         user_info = self.get_user_info()
         quota_info = self.get_quota_info()
@@ -1003,7 +1007,7 @@ class OpenAPI_115:
             return line1, "", "", ""
 
 
-    def check_offline_download_success(self, url, offline_timeout=300):
+    def check_offline_download_success(self, url: str, offline_timeout: int = 300) -> tuple[bool, str, str]:
         time_out = 0
         task_name = ""
         info_hash = ""
@@ -1048,7 +1052,7 @@ class OpenAPI_115:
     #     return False, task_name, info_hash
 
         
-    def get_files_from_dir(self, path, file_type=4):
+    def get_files_from_dir(self, path: str, file_type: int = 4) -> list[str]:
         """获取指定目录下的所有文件"""
         video_list = []
         file_info = self.get_file_info(path)
@@ -1067,7 +1071,7 @@ class OpenAPI_115:
             video_list.append(file['fn'])
         return video_list
     
-    def get_sync_dir(self, path, file_type=4, offset=0, limit=1150):
+    def get_sync_dir(self, path: str, file_type: int = 4, offset: int = 0, limit: int = 1150) -> list[str]:
         """获取指定目录下的所有文件"""
         video_list = []
         file_info = self.get_file_info(path)
@@ -1098,7 +1102,7 @@ class OpenAPI_115:
 
         return video_list
     
-    def is_directory(self, path):
+    def is_directory(self, path: str) -> bool:
         """检查路径是否为目录"""
         file_info = self.get_file_info(path)
         if not file_info:
@@ -1109,7 +1113,7 @@ class OpenAPI_115:
             return True
         return False
     
-    def create_dir_for_file(self, path, floder_name):
+    def create_dir_for_file(self, path: str, floder_name: str) -> dict[str, Any] | bool | None:
         file_info = self.get_file_info(path)
         if not file_info:
             init.logger.warn(f"获取目录信息失败: {path}")
@@ -1119,7 +1123,7 @@ class OpenAPI_115:
         return self.create_directory(file_info['file_id'], floder_name)
         
     
-    def auto_clean(self, path):
+    def auto_clean(self, path: str) -> None:
         # 开关关闭直接返回
         if str(init.require_bot_config().clean_policy.switch).lower() == "off":
             return
@@ -1162,7 +1166,7 @@ class OpenAPI_115:
             self._batch_delete_files(fid_list)
             
             
-    def auto_clean_by_id(self, file_id):
+    def auto_clean_by_id(self, file_id: str) -> None:
         # 开关关闭直接返回
         if str(init.require_bot_config().clean_policy.switch).lower() == "off":
             return
@@ -1200,7 +1204,7 @@ class OpenAPI_115:
             self._batch_delete_files(fid_list)
             
     
-    def auto_clean_all(self, path, clean_empty_dir=False):
+    def auto_clean_all(self, path: str, clean_empty_dir: bool = False) -> None:
          # 开关关闭直接返回
         if str(init.require_bot_config().clean_policy.switch).lower() == "off":
             return
@@ -1251,7 +1255,7 @@ class OpenAPI_115:
             if fid_list:
                 self._batch_delete_files(fid_list)
 
-    def find_all_junk_files(self, cid, offset, byte_size, file_list=None, limit=1150):
+    def find_all_junk_files(self, cid: str, offset: int, byte_size: int, file_list: list[dict[str, Any]] | None = None, limit: int = 1150) -> list[dict[str, Any]]:
         """
         递归查找所有小于指定大小的垃圾文件
         
@@ -1315,7 +1319,7 @@ class OpenAPI_115:
             junk_files = [f for f in file_list if int(f.get('fs', 0)) < byte_size]
             return junk_files
         
-    def find_all_empty_dirs(self, pid_list):
+    def find_all_empty_dirs(self, pid_list: list[str]) -> list[str]:
         """
         pid_list: 目录ID列表
             
@@ -1331,7 +1335,7 @@ class OpenAPI_115:
         return empty_dir_list
     
     
-    def find_all_voideos(self, path, success_task, time_stamp, offset=0, video_list=None, limit=1150):
+    def find_all_voideos(self, path: str, success_task: list[dict[str, Any]], time_stamp: int, offset: int = 0, video_list: list[dict[str, Any]] | None = None, limit: int = 1150) -> list[dict[str, Any]]:
         file_info = self.get_file_info(path)
         if not file_info:
             init.logger.warn(f"获取目录信息失败: {path}")
@@ -1393,7 +1397,7 @@ class OpenAPI_115:
                 
 
 
-    def create_dir_recursive(self, path):
+    def create_dir_recursive(self, path: str) -> dict[str, Any] | None:
         """递归创建目录"""
         # 清除目标路径缓存，确保状态最新
         if path in self.file_info_cache:
@@ -1488,7 +1492,7 @@ class OpenAPI_115:
         return final_info
         
     
-    def check_risk(self):
+    def check_risk(self) -> bool:
         self.request_count += 1
         if self.lifetime_vip:
             request_risk_value = 15000 * RISK_THRESHOLD
@@ -1502,14 +1506,14 @@ class OpenAPI_115:
         
             
     @staticmethod
-    def save_token_to_file(access_token: str, refresh_token: str, file_path: str):
+    def save_token_to_file(access_token: str, refresh_token: str, file_path: str) -> None:
         """将access_token和refresh_token保存到文件"""
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump({"access_token": access_token, "refresh_token": refresh_token}, f)
         init.logger.info(f"Tokens saved to {file_path}")
         
     @staticmethod
-    def get_challenge() -> str:
+    def get_challenge() -> tuple[str, str]:
         # 生成随机字节（避免直接使用 ASCII 字符以确保安全随机性）
         random_bytes = os.urandom(64)
         # 转换为 URL-safe Base64，并移除填充字符（=）
@@ -1519,13 +1523,13 @@ class OpenAPI_115:
         sha256_hash = hashlib.sha256(verifier.encode('utf-8')).digest()
         # Base64 URL 安全编码并移除填充字符
         challenge = base64.urlsafe_b64encode(sha256_hash).rstrip(b'=').decode('utf-8')
-        return verifier, challenge  # ty:ignore[invalid-return-type]
+        return verifier, challenge
     
-def file_sha1(file_path):
+def file_sha1(file_path: str) -> str:
     with open(file_path, 'rb') as f:
         return hashlib.sha1(f.read()).hexdigest()
     
-def sha1_digest(file_path):
+def sha1_digest(file_path: str) -> str:
     h = hashlib.sha1()
     with Path(file_path).open('rb') as f:
         for chunk in iter(lambda: f.read(128), b''):
@@ -1534,7 +1538,7 @@ def sha1_digest(file_path):
     return h.hexdigest()
 
 
-def calculate_sha1(file_path):
+def calculate_sha1(file_path: str) -> str | None:
     """计算文件的SHA1哈希值"""
     sha1 = hashlib.sha1()
     try:
@@ -1549,7 +1553,7 @@ def calculate_sha1(file_path):
         init.logger.error(f"错误：文件未找到 -> {file_path}")
         return None
     
-def file_sha1_by_range(file_path, start, end):
+def file_sha1_by_range(file_path: str, start: int, end: int) -> str:
     """计算文件从start到end（含end）的SHA1"""
     size = end - start + 1
     sha1 = hashlib.sha1()
@@ -1560,7 +1564,7 @@ def file_sha1_by_range(file_path, start, end):
     return sha1.hexdigest()
 
 
-def get_parent_paths(path):
+def get_parent_paths(path: str) -> list[str]:
     """
     获取路径的所有父级路径列表
     :param path: 输入路径，如 "/AV/rigeng/111/222"

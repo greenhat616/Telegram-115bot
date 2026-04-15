@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from typing import Any
 import httpx
 from app.utils.http_client import http_request_fast
 from bs4 import BeautifulSoup
@@ -7,7 +8,7 @@ from telegram.ext import ContextTypes, CommandHandler, ConversationHandler, Call
 from telegram.error import TelegramError
 import time
 from app import init
-from app.utils.ptb_helpers import require_message, require_query, require_chat, require_user, require_user_data
+from app.utils.ptb_helpers import require_message, require_query, require_chat, require_user, require_user_data, require_text, require_rss_data
 from app.utils.message_queue import add_task_to_queue
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -136,16 +137,18 @@ async def select_sub_category(update: Update, context: ContextTypes.DEFAULT_TYPE
         return ConversationHandler.END
 
 async def rss_handle_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_input = require_message(update).text.strip()  # ty:ignore[unresolved-attribute]
-    sub_category = require_user_data(context).get('rss_sub_category')
-    main_category = require_user_data(context).get('rss_main_category')
-    selected_category = require_user_data(context).get('selected_category')
-    
+    user_input = require_text(update).strip()
+    data = require_rss_data(context)
+    sub_category = data.get('rss_sub_category')
+    main_category = data.get('rss_main_category')
+    selected_category = data.get('selected_category')
+
     rss_host = init.require_bot_config().rsshub.rss_host.rstrip('/')
     rss_url = ""
 
-    if main_category == "JavBus":
-        rss_url = f"{rss_host}/{selected_category.route.rstrip('/').lstrip('/')}/{user_input}"  # ty:ignore[unresolved-attribute]
+    if main_category == "JavBus" and selected_category and sub_category:
+        route = str(selected_category.route).rstrip('/').lstrip('/')  # ty:ignore[unresolved-attribute]
+        rss_url = f"{rss_host}/{route}/{user_input}"
         # 启动后台任务
         asyncio.create_task(rss_javbus(sub_category, rss_url, user_input))
 
@@ -166,7 +169,7 @@ async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=require_chat(update).id, text="🚪用户退出本次会话")
     return ConversationHandler.END
 
-def check_rss_config(main_category=None):
+def check_rss_config(main_category: str | None = None) -> str:
     error_message = ""
     rss_config = init.require_bot_config().rsshub
     rss_host = rss_config.rss_host
@@ -215,7 +218,7 @@ def check_rss_config(main_category=None):
 
     return error_message
 
-def register_rss_handlers(application):
+def register_rss_handlers(application: Any) -> None:
     # 命令形式的下载交互
     download_command_handler = ConversationHandler(
         entry_points=[CommandHandler("rss", rss_command)],  # ty:ignore[invalid-argument-type]

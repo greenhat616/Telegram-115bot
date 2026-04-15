@@ -14,7 +14,7 @@ from app.core.offline_task_retry import offline_task_retry
 
 scheduler = BackgroundScheduler()
 
-def get_sync_time(category):
+def get_sync_time(category: str) -> dict[str, int]:
     config = init.require_bot_config()
     sync_time = {'hour': 3, 'minute': 0}  # 默认时间03:00
     if category == "sehua":
@@ -42,7 +42,7 @@ def get_sync_time(category):
 
     return sync_time
 
-def clear_request_count():
+def clear_request_count() -> None:
     """清除115请求计数"""
     api = init.require_openapi_115()
     init.logger.info(f"昨日累计115 OpenAPI请求次数: [{api.request_count}]")
@@ -55,7 +55,7 @@ def clear_request_count():
 # 定义任务列表
 tasks = []
 
-def init_tasks():
+def init_tasks() -> None:
     global tasks
     sehua_sync_time = get_sync_time("sehua")
     jav_sync_time = get_sync_time("jav")
@@ -70,7 +70,7 @@ def init_tasks():
     ]
 
 
-def subscribe_scheduler():
+def subscribe_scheduler() -> None:
     # 初始化任务列表，确保配置已加载
     init_tasks()
 
@@ -99,7 +99,7 @@ def subscribe_scheduler():
         scheduler.start()
 
 
-def stop_all_subscriptions():
+def stop_all_subscriptions() -> None:
     for task in tasks:
         job = scheduler.get_job(task['id'])
         if job:
@@ -111,7 +111,7 @@ def stop_all_subscriptions():
 
 
 
-def start_scheduler_in_thread():
+def start_scheduler_in_thread() -> None:
     """启动后台调度器（BackgroundScheduler 自带线程池，无需额外的守护线程）"""
     subscribe_scheduler()
 

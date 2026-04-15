@@ -24,13 +24,13 @@ from app.handlers.crawl_handler import register_crawl_handlers
 from app.handlers.rss_handler import register_rss_handlers
 
 
-def get_version(md_format=False):
+def get_version(md_format: bool = False) -> str:
     version = "v3.4.1"
     if md_format:
         return escape_markdown(version, version=2)
     return version
 
-def get_help_info():
+def get_help_info() -> str:
     version = get_version()
     help_info = f"""
 <b>🍿 Telegram-115Bot {version} 使用手册</b>\n\n
@@ -81,12 +81,12 @@ def get_help_info():
 """
     return help_info
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     help_info = get_help_info()
     assert update.effective_chat is not None
     await context.bot.send_message(chat_id=update.effective_chat.id, text=help_info, parse_mode="html", disable_web_page_preview=True)
-    
-async def reload(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def reload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     init.load_yaml_config()
     config = init.require_bot_config()
     init.logger.info("Reload configuration success:")
@@ -94,7 +94,7 @@ async def reload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     assert update.effective_chat is not None
     await context.bot.send_message(chat_id=update.effective_chat.id, text="🔁重载配置完成！", parse_mode="html")
 
-def start_async_loop():
+def start_async_loop() -> None:
     """启动异步事件循环的线程"""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -109,7 +109,7 @@ def start_async_loop():
         loop.close()
         init.logger.info("事件循环已关闭")
 
-def send_start_message():
+def send_start_message() -> None:
     version = get_version()  
     if init.openapi_115 is None:
         return
@@ -137,7 +137,7 @@ def send_start_message():
         )
 
 
-def update_logger_level():
+def update_logger_level() -> None:
     import logging
     logging.getLogger('httpx').setLevel(logging.WARNING)
     logging.getLogger('telegram').setLevel(logging.WARNING)
@@ -145,7 +145,7 @@ def update_logger_level():
     logging.getLogger('telegram.ext.Updater').setLevel(logging.WARNING)
     logging.getLogger('telegram.Bot').setLevel(logging.WARNING)
     
-def get_bot_menu():
+def get_bot_menu() -> list[BotCommand]:
     return  [
         BotCommand("start", "获取帮助信息"),
         BotCommand("auth", "115扫码授权"),
@@ -160,7 +160,7 @@ def get_bot_menu():
         BotCommand("q", "退出当前会话")]
     
 
-async def set_bot_menu(application):
+async def set_bot_menu(application: Application) -> None:
     """异步设置Bot菜单"""
     try:
         await application.bot.set_my_commands(get_bot_menu())
@@ -168,7 +168,7 @@ async def set_bot_menu(application):
     except Exception as e:
         init.logger.error(f"设置Bot菜单失败: {e}")
 
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """全局异常处理器，防止未捕获异常导致 polling 静默停止"""
     import traceback
     error_details = traceback.format_exc()
@@ -183,12 +183,12 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
-async def post_init(application):
+async def post_init(application: Application) -> None:
     """应用初始化后的回调"""
     await set_bot_menu(application)
 
 
-def main():
+def main() -> None:
     init.init()
     # 启动消息队列
     message_thread = threading.Thread(target=start_async_loop, daemon=True)

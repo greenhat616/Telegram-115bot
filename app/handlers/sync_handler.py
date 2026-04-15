@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from typing import Any
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, ConversationHandler, CallbackQueryHandler
@@ -79,12 +80,13 @@ async def select_sub_category_sync(update: Update, context: ContextTypes.DEFAULT
     selected_path = query.data
     if selected_path == "quit":
         return await quit_conversation(update, context)
-    mount_root = Path(init.require_bot_config().mount_root)
-    strm_root = Path(init.require_bot_config().strm_root)
-    openlist_root = Path(init.require_bot_config().openlist_root)
+    config = init.require_bot_config()
+    mount_root = Path(config.mount_root)
+    strm_root = Path(config.strm_root)
+    openlist_root = Path(config.openlist_root)
     init.logger.debug(f"selected_path: {selected_path}")
     try:
-        strm_mode = init.require_bot_config().strm_mode
+        strm_mode = config.strm_mode
         if strm_mode == "disable":
             await query.edit_message_text(text="⚠️ 当前strm同步功能已禁用！")
             return ConversationHandler.END
@@ -139,7 +141,7 @@ async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=require_chat(update).id, text="🚪用户退出本次会话")
     return ConversationHandler.END
 
-def create_movie_directory(sync_path, movie_path):
+def create_movie_directory(sync_path: Path, movie_path: str) -> Path:
     if movie_path.startswith("/"):
         movie_path = movie_path[1:]
     
@@ -158,7 +160,7 @@ def create_movie_directory(sync_path, movie_path):
     return sync_path
 
 
-def register_sync_handlers(application):
+def register_sync_handlers(application: Any) -> None:
     # 同步strm软链
     sync_handler = ConversationHandler(
         entry_points=[CommandHandler("sync", sync_strm_files)],  # ty:ignore[invalid-argument-type]

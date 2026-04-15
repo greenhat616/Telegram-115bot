@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from typing import Any
 from telegram import Update
 from telegram.ext import CommandHandler, ConversationHandler, ContextTypes
 from app import init
@@ -32,7 +33,7 @@ async def auth_pkce_115(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-def check_115_app_id():
+def check_115_app_id() -> bool:
     api_key = str(init.require_bot_config().app_115_id)
     if api_key is None or api_key.strip() == "" or api_key.strip().lower() == "your_115_app_id":
         init.logger.error("115 Open APPID未配置!")
@@ -49,7 +50,7 @@ async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-def register_auth_handlers(application):
+def register_auth_handlers(application: Any) -> None:
     auth_handler = ConversationHandler(
         entry_points=[CommandHandler("auth", auth_pkce_115)],  # ty:ignore[invalid-argument-type]
         states={},  # 添加空的states字典

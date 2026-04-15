@@ -3,33 +3,35 @@ import asyncio
 import os
 import hashlib
 import math
+from typing import Any
 from datetime import datetime
 from pathlib import Path
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message
+from telegram.ext import ContextTypes
 from app import init
 from app.utils.fast_telethon import download_file_parallel
 
 class VideoDownloadManager:
-    def __init__(self):
+    def __init__(self) -> None:
         # 任务队列
-        self.queue = asyncio.Queue()
+        self.queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         # 正在进行的任务 {task_id: task_info}
-        self.active_tasks = {}
+        self.active_tasks: dict[str, dict[str, Any]] = {}
         # 最大并发数
-        self.max_concurrent_tasks = 3
+        self.max_concurrent_tasks: int = 3
         # 当前并发数
-        self.current_tasks = 0
+        self.current_tasks: int = 0
         # 任务锁
-        self.lock = asyncio.Lock()
+        self.lock: asyncio.Lock = asyncio.Lock()
         
-    async def add_task(self, task_info):
+    async def add_task(self, task_info: dict[str, Any]) -> None:
         """添加下载任务"""
         await self.queue.put(task_info)
         init.logger.info(f"任务已添加到队列: {task_info['file_name']}")
         # 尝试启动任务处理循环（如果尚未启动）
         asyncio.create_task(self._process_queue())
 
-    async def cancel_task(self, task_id):
+    async def cancel_task(self, task_id: str) -> bool:
         """取消任务"""
         async with self.lock:
             if task_id in self.active_tasks:
@@ -39,7 +41,7 @@ class VideoDownloadManager:
                 return True
         return False
 
-    async def _process_queue(self):
+    async def _process_queue(self) -> None:
         """处理队列中的任务"""
         while True:
             async with self.lock:
@@ -60,7 +62,7 @@ class VideoDownloadManager:
             # 启动任务
             asyncio.create_task(self._run_task(task_info))
 
-    async def _run_task(self, task_info):
+    async def _run_task(self, task_info: dict[str, Any]) -> None:
         """执行单个下载任务"""
         task_id = task_info['task_id']
         file_name = task_info['file_name']
@@ -84,7 +86,7 @@ class VideoDownloadManager:
             # 进度回调
             last_update_time = datetime.now()
             
-            async def progress_callback(current, total):
+            async def progress_callback(current: int, total: int) -> None:
                 nonlocal last_update_time
                 if cancel_event.is_set():
                     raise asyncio.CancelledError("用户取消下载")
@@ -144,7 +146,7 @@ class VideoDownloadManager:
             # 继续处理队列
             asyncio.create_task(self._process_queue())
 
-    async def _upload_to_115(self, file_path, save_dir, context, chat_id, message_id, task_id):
+    async def _upload_to_115(self, file_path: str, save_dir: str, context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, task_id: str) -> None:
         """上传文件到115"""
         try:
             file_size = os.path.getsize(file_path)
@@ -176,7 +178,7 @@ class VideoDownloadManager:
         finally:
             self._cleanup(file_path)
 
-    def _process_file(self, file_path):
+    def _process_file(self, file_path: str) -> str:
         """处理文件格式"""
         format_name = self._detect_video_format(file_path)
         new_path = file_path[:-3] + format_name
@@ -185,7 +187,7 @@ class VideoDownloadManager:
             return new_path
         return file_path
 
-    def _cleanup(self, file_path):
+    def _cleanup(self, file_path: str) -> None:
         """清理临时文件"""
         try:
             if os.path.exists(file_path):
@@ -193,7 +195,7 @@ class VideoDownloadManager:
         except Exception as e:
             init.logger.warn(f"清理文件失败: {e}")
 
-    async def _update_status(self, context, chat_id, message_id, text, task_id, show_cancel=False):
+    async def _update_status(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, text: str, task_id: str, show_cancel: bool = False) -> None:
         """更新消息状态"""
         try:
             reply_markup = None
@@ -211,22 +213,22 @@ class VideoDownloadManager:
         except Exception as e:
             pass
 
-    def _format_size(self, size):
+    def _format_size(self, size: int) -> str:
         if size == 0: return "0 B"
         names = ["B", "KB", "MB", "GB", "TB"]
         i = int(math.floor(math.log(size, 1024)))
         p = math.pow(1024, i)
         return f"{round(size/p, 2)} {names[i]}"
 
-    def _create_progress_bar(self, percentage):
+    def _create_progress_bar(self, percentage: float) -> str:
         filled = int(percentage // 5)
         return "█" * filled + "░" * (20 - filled) + f" {percentage:.1f}%"
 
-    def _calculate_sha1(self, file_path):
+    def _calculate_sha1(self, file_path: str) -> str:
         with open(file_path, 'rb') as f:
             return hashlib.sha1(f.read()).hexdigest()
 
-    def _detect_video_format(self, file_path):
+    def _detect_video_format(self, file_path: str) -> str:
         # 复用原有的格式检测逻辑
         try:
             with open(file_path, "rb") as f:

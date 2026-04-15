@@ -4,7 +4,8 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, ConversationHandler, \
     MessageHandler, filters, CallbackQueryHandler
 from app import init
-from app.utils.ptb_helpers import require_message, require_query, require_chat, require_user, require_user_data
+from typing import Any, cast
+from app.utils.ptb_helpers import require_message, require_query, require_chat, require_user, require_user_data, require_text, require_query_data
 import os
 import uuid
 from datetime import datetime
@@ -45,7 +46,8 @@ async def save_video2115(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if update.message and require_message(update).video:
         video = require_message(update).video
-        file_name = video.file_name if video.file_name else f"{datetime.now().strftime('%Y%m%d%H%M%S')}.mp4"  # ty:ignore[unresolved-attribute]
+        assert video is not None
+        file_name = video.file_name or f"{datetime.now().strftime('%Y%m%d%H%M%S')}.mp4"
         
         # 获取扩展名
         _, file_ext = os.path.splitext(file_name)
@@ -59,7 +61,7 @@ async def save_video2115(update: Update, context: ContextTypes.DEFAULT_TYPE):
         require_user_data(context)[f"video_{task_id}"] = {
             "file_name": file_name,
             "file_ext": file_ext,
-            "file_size": video.file_size,  # ty:ignore[unresolved-attribute]
+            "file_size": video.file_size,
             "message_id": update.message.message_id,
             "chat_id": require_chat(update).id
         }
@@ -78,9 +80,14 @@ async def save_video2115(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_to_message_id=update.message.message_id
         )
 
-async def show_directory_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, task_id: str, edit_message: bool = False):
+def _get_video_info(context: ContextTypes.DEFAULT_TYPE, task_id: str) -> dict[str, Any] | None:
+    raw = require_user_data(context).get(f"video_{task_id}")
+    return cast(dict[str, Any], raw) if raw else None
+
+
+async def show_directory_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, task_id: str, edit_message: bool = False) -> None:
     """显示目录选择界面"""
-    video_info = require_user_data(context).get(f"video_{task_id}")
+    video_info = _get_video_info(context, task_id)
     if not video_info:
         if edit_message and update.callback_query:
             await update.callback_query.edit_message_text("❌ 任务已过期")
@@ -88,7 +95,7 @@ async def show_directory_selection(update: Update, context: ContextTypes.DEFAULT
             await context.bot.send_message(chat_id=require_chat(update).id, text="❌ 任务已过期")
         return
 
-    file_name = video_info['file_name']  # ty:ignore[not-subscriptable]
+    file_name = video_info['file_name']
     
     # 显示主分类
     keyboard = []
@@ -113,43 +120,43 @@ async def show_directory_selection(update: Update, context: ContextTypes.DEFAULT
             chat_id=require_chat(update).id, 
             text=text,
             reply_markup=reply_markup,
-            reply_to_message_id=update.message.message_id  # ty:ignore[unresolved-attribute]
+            reply_to_message_id=require_message(update).message_id
         )
 
-async def handle_rename_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_rename_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理重命名输入"""
     task_id = require_user_data(context).get('video_rename_task_id')
     if not task_id:
         return
 
-    new_name = require_message(update).text.strip()  # ty:ignore[unresolved-attribute]
-    
-    video_info = require_user_data(context).get(f"video_{task_id}")
+    new_name = require_text(update).strip()
+
+    video_info = _get_video_info(context, str(task_id))
     if video_info:
         # 如果新名字没有扩展名，且我们有原扩展名
         if not os.path.splitext(new_name)[1]:
-             file_ext = video_info.get('file_ext', '.mp4')  # ty:ignore[unresolved-attribute]
+             file_ext = video_info.get('file_ext', '.mp4')
              new_name += file_ext
-             
+
         video_info['file_name'] = new_name
         # 清除等待状态
         del require_user_data(context)['video_rename_task_id']
-        
+
         # 显示目录选择
-        await show_directory_selection(update, context, task_id)  # ty:ignore[invalid-argument-type]
+        await show_directory_selection(update, context, str(task_id))
 
 
 
-async def handle_category_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_category_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = require_query(update)
     try:
         await query.answer()
     except Exception as e:
         # 忽略 "Query is too old" 错误，这通常发生在点击很久之前的按钮时
         init.logger.debug(f"Callback query answer failed: {e}")
-    
-    data = query.data
-    parts = data.split('_')  # ty:ignore[unresolved-attribute]
+
+    data = require_query_data(update)
+    parts = data.split('_')
     action = parts[0]
     
     if action == "video" and len(parts) > 1 and parts[1] == "rename":
@@ -190,9 +197,9 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
         
     elif action == "sub" or action == "quick":
         # 选择子分类: sub_path_taskId 或 quick_last_taskId
-        save_path = None
-        task_id = None
-        
+        save_path: str = ""
+        task_id: str = ""
+
         if action == "sub":
             task_id = parts[-1]
             save_path = "_".join(parts[1:-1])
@@ -200,12 +207,12 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
             require_user_data(context)['last_video_save_path'] = save_path
         elif action == "quick":
             task_id = parts[2]
-            save_path = require_user_data(context).get('last_video_save_path')
+            save_path = str(require_user_data(context).get('last_video_save_path', ''))
             if not save_path:
                 await query.answer("上次保存路径已失效，请重新选择", show_alert=True)
                 return
-        
-        video_info = require_user_data(context).get(f"video_{task_id}")
+
+        video_info = _get_video_info(context, task_id)
         if not video_info:
             await query.edit_message_text("❌ 任务信息已过期")
             return
@@ -215,7 +222,7 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
             # 确定 entity
             entity = None
             # 如果是私聊（chat_id == user_id），User Client 需要去获取和 Bot 的聊天记录
-            if video_info['chat_id'] == require_user(update).id:  # ty:ignore[not-subscriptable]
+            if video_info['chat_id'] == require_user(update).id:
                 # 动态获取 Bot 用户名，无需依赖配置文件
                 try:
                     bot_info = await context.bot.get_me()
@@ -226,7 +233,7 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
                     entity = init.require_bot_config().bot_name
             else:
                 # 群组情况，直接用 chat_id
-                entity = video_info['chat_id']  # ty:ignore[not-subscriptable]
+                entity = video_info['chat_id']
 
             if not entity:
                 await query.edit_message_text("❌ 无法确定消息来源 (Entity unknown)")
@@ -237,7 +244,8 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
             
             # 方法1: 精确 ID 获取 (Telethon get_messages with ids)
             try:
-                msg = await init.tg_user_client.get_messages(entity, ids=video_info['message_id'])  # ty:ignore[not-subscriptable, unresolved-attribute]
+                assert init.tg_user_client is not None
+                msg = await init.tg_user_client.get_messages(entity, ids=video_info['message_id'])
                 if msg and msg.media:
                     target_msg = msg
             except Exception as e:
@@ -245,14 +253,15 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
 
             # 方法2: 遍历最近消息 (Fallback，兼容旧逻辑)
             if not target_msg:
-                init.logger.info(f"精确获取失败，尝试遍历最近消息 (ID: {video_info['message_id']})")  # ty:ignore[not-subscriptable]
+                init.logger.info(f"精确获取失败，尝试遍历最近消息 (ID: {video_info['message_id']})")
                 try:
                     # 获取最近 20 条消息
-                    recent_msgs = await init.tg_user_client.get_messages(entity, limit=20)  # ty:ignore[unresolved-attribute]
+                    assert init.tg_user_client is not None
+                    recent_msgs = await init.tg_user_client.get_messages(entity, limit=20)
                     
                     # 2.1 优先寻找 ID 匹配的消息
                     for msg in recent_msgs:
-                        if msg.id == video_info['message_id'] and msg.media:  # ty:ignore[not-subscriptable]
+                        if msg.id == video_info['message_id'] and msg.media:
                             target_msg = msg
                             break
                     
@@ -268,19 +277,19 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
                     init.logger.error(f"遍历消息失败: {e}")
 
             if not target_msg:
-                await query.edit_message_text(f"❌ 无法获取原始视频消息 (Entity: {entity}, ID: {video_info['message_id']})")  # ty:ignore[not-subscriptable]
+                await query.edit_message_text(f"❌ 无法获取原始视频消息 (Entity: {entity}, ID: {video_info['message_id']})")
                 return
                 
             # 提交任务到管理器
             task_info = {
                 "task_id": task_id,
-                "file_name": video_info['file_name'],  # ty:ignore[not-subscriptable]
-                "file_size": video_info['file_size'],  # ty:ignore[not-subscriptable]
+                "file_name": video_info['file_name'],
+                "file_size": video_info['file_size'],
                 "save_path": save_path,
                 "message": target_msg,
                 "context": context,
                 "chat_id": require_chat(update).id,
-                "message_id": query.message.message_id  # 更新这条消息的状态  # ty:ignore[unresolved-attribute]
+                "message_id": query.message.message_id if query.message else 0
             }
             
             await video_manager.add_task(task_info)
@@ -326,7 +335,7 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
                 await query.edit_message_text("🛑 正在取消任务...")
 
 
-def register_video_handlers(application):
+def register_video_handlers(application: Any) -> None:
     # 注册视频消息处理器
     application.add_handler(MessageHandler(filters.VIDEO, save_video2115))
     

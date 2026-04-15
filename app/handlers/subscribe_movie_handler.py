@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
+from typing import Any
 
 import asyncio
 import re
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from app import init
-from app.utils.ptb_helpers import require_message, require_query, require_chat, require_user, require_user_data
+from app.utils.ptb_helpers import require_message, require_query, require_chat, require_user, require_user_data, require_text, require_subscribe_movie_data
 from warnings import filterwarnings
 from telegram.warnings import PTBUserWarning
 from app.core.subscribe_movie import get_tmdb_id
@@ -20,13 +21,14 @@ SUBSCRIBE, SUBSCRIBE_OPERATE, ADD_SUBSCRIBE, VIEW_SUBSCRIBE, DEL_SUBSCRIBE, SELE
 
 
 
-async def subscribe_moive(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def subscribe_moive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     usr_id = require_user(update).id
     if not init.check_user(usr_id):
         await require_message(update).reply_text("⚠️ 对不起，您无权使用115机器人！")
         return ConversationHandler.END
-    if init.require_bot_config().x_app_id == "your_app_id" or init.require_bot_config().x_app_id == "" or init.require_bot_config().x_app_id is None \
-        or init.require_bot_config().x_api_key == "your_api_key" or init.require_bot_config().x_api_key == "" or init.require_bot_config().x_api_key is None:
+    config = init.require_bot_config()
+    if config.x_app_id == "your_app_id" or config.x_app_id == "" or config.x_app_id is None \
+        or config.x_api_key == "your_api_key" or config.x_api_key == "" or config.x_api_key is None:
         await require_message(update).reply_text("⚠️ 请先取得nullbrAPI接口的授权才能使用电影订阅功能！\n申请方法见配置文件。")
         return ConversationHandler.END
 
@@ -134,7 +136,7 @@ async def subscribe_operate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def add_subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     usr_id = require_user(update).id
-    movie_name = require_message(update).text
+    movie_name = require_text(update)
     # 先检查电影是否存在于TMDB（移至线程池避免阻塞主事件循环）
     tmdb_id = await asyncio.to_thread(get_tmdb_id, movie_name)
     if tmdb_id is None:
@@ -182,7 +184,7 @@ async def view_subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def del_subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        tmdb_id = int(require_message(update).text)  # ty:ignore[invalid-argument-type]
+        tmdb_id = int(require_text(update))
         success, movie_name = check_tmdb_id(tmdb_id)
         if success:
             del_subscribe_movie(tmdb_id)
@@ -304,7 +306,7 @@ def get_subscribe_movie():
         return movie_list
 
 
-def register_subscribe_movie_handlers(application):
+def register_subscribe_movie_handlers(application: Any) -> None:
     sub_movie_handler = ConversationHandler(
         entry_points=[CommandHandler("sm", subscribe_moive)],  # ty:ignore[invalid-argument-type]
         states={

@@ -16,6 +16,7 @@ from app.core.offline_task_retry import javbus_offline
 from app.utils.sqlitelib import SqlLiteLib
 from concurrent.futures import ThreadPoolExecutor
 from app.utils.utils import check_magnet, clean_magnet
+from typing import Any
 
 # 全局信号量，限制并发数为 5
 sem = asyncio.Semaphore(5)
@@ -26,7 +27,7 @@ executor = ThreadPoolExecutor(max_workers=10)
 def _get_max_subscribe() -> int:
     return init.require_bot_config().rsshub.javbus.max_subscribe if init.bot_config else 0
 
-async def rss_javbus(sub_category, rss_url, user_input):
+async def rss_javbus(sub_category: str, rss_url: str, user_input: str) -> None:
     page = 1
     tasks = []
     total_success_count = 0
@@ -98,7 +99,7 @@ async def rss_javbus(sub_category, rss_url, user_input):
     init.logger.info("开始JavBus离线任务...")
     javbus_offline()
 
-async def get_content_from_rssurl(rss_url):
+async def get_content_from_rssurl(rss_url: str) -> str | None:
     try:
         loop = asyncio.get_running_loop()
         # 使用 run_in_executor 将同步的 requests 调用转换为异步
@@ -115,7 +116,7 @@ async def get_content_from_rssurl(rss_url):
         init.logger.error(f"获取RSS内容发生未知错误: {e}")
         return None
     
-async def download_image(url, referer=None, save_dir="/tmp/javbus"):
+async def download_image(url: str, referer: str | None = None, save_dir: str = "/tmp/javbus") -> str | None:
     """异步下载图片"""
     if not url:
         return None
@@ -156,7 +157,7 @@ async def download_image(url, referer=None, save_dir="/tmp/javbus"):
         init.logger.error(f"下载图片出错: {e}, URL: {url}")
         return None
 
-async def parse_items(sub_category, items, page_num, user_input, limit=0):
+async def parse_items(sub_category: str, items: list[dict[str, Any]], page_num: int, user_input: str, limit: int = 0) -> int:
     tasks = []
     init.logger.info(f"开始解析第 {page_num} 页，共 {len(items)} 个任务")
     for item in items:
@@ -181,7 +182,7 @@ async def parse_items(sub_category, items, page_num, user_input, limit=0):
         return success_count
     return 0
 
-async def save_items_to_db(items):
+async def save_items_to_db(items: list[dict[str, Any]]) -> None:
     """批量保存数据到数据库"""
     if not items:
         return
@@ -193,7 +194,7 @@ async def save_items_to_db(items):
     except Exception as e:
         init.logger.error(f"批量入库失败: {e}")
 
-def _batch_insert_sync(items):
+def _batch_insert_sync(items: list[dict[str, Any]]) -> None:
     """同步的批量插入逻辑"""
     # 实际的 SQL 插入逻辑，根据你的表结构调整
     # 这里使用上下文管理器，确保连接正确关闭
@@ -263,7 +264,7 @@ JAvBus订阅通知：
             insert_count += 1
         init.logger.info(f"本次批量插入完成，共插入 {insert_count} 条新数据。")
 
-async def process_single_item(sub_category, item, user_input):
+async def process_single_item(sub_category: str, item: dict[str, Any], user_input: str) -> dict[str, str | None] | int:
     async with sem:
         try:
             # 1. 提取标题
@@ -330,14 +331,14 @@ async def process_single_item(sub_category, item, user_input):
                 if magnet_table:
                     first_magnet_link = magnet_table.find('a', href=re.compile(r'^magnet:\?'))
                     if first_magnet_link:
-                        magnet = first_magnet_link['href']
+                        magnet = str(first_magnet_link['href'])
                         magnet = clean_magnet(magnet)
                         
                 
                 # 如果表格中没找到，尝试查找所有链接
                 if not magnet:
                     for a in soup.find_all('a', href=True):
-                        href = a['href']
+                        href = str(a['href'])
                         if check_magnet(href):
                             magnet = href
                             break
@@ -357,7 +358,7 @@ async def process_single_item(sub_category, item, user_input):
                 # 8. 异步下载封面图片
                 poster_path = None
                 if cover_url:
-                    poster_path = await download_image(cover_url, referer=pub_url)
+                    poster_path = await download_image(str(cover_url), referer=str(pub_url))
                 
                 # 打印日志或后续处理
                 init.logger.info(f"RSS解析成功: {av_number} {title}")
@@ -384,7 +385,7 @@ async def process_single_item(sub_category, item, user_input):
             init.logger.error(f"解析RSS内容时发生错误: {e}")
             return 0
     
-def get_save_path(sub_category, user_input):
+def get_save_path(sub_category: str, user_input: str) -> str:
     category_list = init.require_bot_config().rsshub.javbus.category
     save_path = ""
     for category in category_list:
@@ -395,7 +396,8 @@ def get_save_path(sub_category, user_input):
                 return os.path.join(save_path, safe_input)
             else:
                 return save_path
-            
+    return save_path
+
 if __name__ == "__main__":
     init.init_log()
     init.load_yaml_config()

@@ -36,6 +36,19 @@ class RssUserData(TypedDict, total=False):
     selected_path: str
 
 
+class VideoUserData(TypedDict, total=False):
+    last_video_save_path: str
+    video_rename_task_id: str
+
+
+class CrawlUserData(TypedDict, total=False):
+    date: str
+
+
+class SyncUserData(TypedDict, total=False):
+    selected_main_category: str
+
+
 class RenameData(TypedDict):
     user_id: int
     action: str

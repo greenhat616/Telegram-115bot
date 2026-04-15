@@ -1,3 +1,5 @@
+from typing import Any
+
 import httpx
 from tenacity import (
     RetryCallState,
@@ -37,7 +39,7 @@ _long_io_insecure_client = httpx.Client(
 )
 
 
-def _coerce_timeout(timeout):
+def _coerce_timeout(timeout: Any) -> httpx.Timeout | None:
     if timeout is None or isinstance(timeout, httpx.Timeout):
         return timeout
     if isinstance(timeout, (int, float)):
@@ -48,7 +50,7 @@ def _coerce_timeout(timeout):
     return timeout
 
 
-def _retryable_exception(exc):
+def _retryable_exception(exc: BaseException) -> bool:
     return isinstance(exc, (
         httpx.ConnectError,
         httpx.TimeoutException,
@@ -57,7 +59,7 @@ def _retryable_exception(exc):
     ))
 
 
-def _retryable_fast_exception(exc):
+def _retryable_fast_exception(exc: BaseException) -> bool:
     return isinstance(exc, (
         httpx.ConnectError,
         httpx.TimeoutException,
@@ -65,7 +67,7 @@ def _retryable_fast_exception(exc):
     ))
 
 
-def _retryable_5xx(response):
+def _retryable_5xx(response: object) -> bool:
     return isinstance(response, httpx.Response) and response.status_code >= 500
 
 
@@ -78,13 +80,13 @@ def _return_last_response_or_raise(retry_state: RetryCallState):
     return outcome.result()
 
 
-def _select_client(use_long_io=False, verify=True):
+def _select_client(use_long_io: bool = False, verify: bool = True) -> httpx.Client:
     if use_long_io:
         return _long_io_client if verify else _long_io_insecure_client
     return _default_client if verify else _default_insecure_client
 
 
-def _send(method, url, *, use_long_io=False, **kwargs):
+def _send(method: str, url: str, *, use_long_io: bool = False, **kwargs: Any) -> httpx.Response:
     verify = kwargs.pop("verify", True)
     timeout = _coerce_timeout(kwargs.pop("timeout", None))
     client = _select_client(use_long_io=use_long_io, verify=verify)
@@ -100,7 +102,7 @@ def _send(method, url, *, use_long_io=False, **kwargs):
     retry_error_callback=_return_last_response_or_raise,
     reraise=False,
 )
-def http_request(method, url, **kwargs):
+def http_request(method: str, url: str, **kwargs: Any) -> httpx.Response:
     return _send(method, url, **kwargs)
 
 
@@ -110,7 +112,7 @@ def http_request(method, url, **kwargs):
     retry=retry_if_exception(_retryable_fast_exception),
     reraise=True,
 )
-def http_request_fast(method, url, **kwargs):
+def http_request_fast(method: str, url: str, **kwargs: Any) -> httpx.Response:
     return _send(method, url, **kwargs)
 
 
@@ -121,13 +123,13 @@ def http_request_fast(method, url, **kwargs):
     retry_error_callback=_return_last_response_or_raise,
     reraise=False,
 )
-def http_request_long(method, url, **kwargs):
+def http_request_long(method: str, url: str, **kwargs: Any) -> httpx.Response:
     return _send(method, url, use_long_io=True, **kwargs)
 
 
-def get(url, **kwargs):
+def get(url: str, **kwargs: Any) -> httpx.Response:
     return http_request("GET", url, **kwargs)
 
 
-def post(url, **kwargs):
+def post(url: str, **kwargs: Any) -> httpx.Response:
     return http_request("POST", url, **kwargs)

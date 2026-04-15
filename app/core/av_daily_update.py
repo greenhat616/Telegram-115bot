@@ -10,7 +10,7 @@ from app.utils.http_client import http_request
 from app.core.offline_task_retry import av_daily_offline
 
 
-def get_max_page(html_content):    
+def get_max_page(html_content: str) -> int:    
     """
     获取最新AV的最大页数
     :return: 最大页数
@@ -33,7 +33,7 @@ def get_max_page(html_content):
         max_page = max(page_numbers)
     return max_page
 
-def get_today_av():
+def get_today_av() -> list[dict[str, str]] | None:
     date = datetime.datetime.now().strftime("%Y-%m-%d")
     url = f"https://javbee.vip/date/{date}"
     response = http_request("GET", url, verify=False, timeout=httpx.Timeout(60.0, connect=10.0))
@@ -48,7 +48,7 @@ def get_today_av():
     return crawl_javbee(url, response.text, date)
 
 
-def get_av_by_date(date):
+def get_av_by_date(date: str) -> list[dict[str, str]] | None:
     url = f"https://javbee.vip/date/{date}"
     response = http_request("GET", url, verify=False, timeout=httpx.Timeout(60.0, connect=10.0))
     if response.status_code == 500:
@@ -63,7 +63,7 @@ def get_av_by_date(date):
        
     
     
-def crawl_javbee(url, html_content, publish_date):
+def crawl_javbee(url: str, html_content: str, publish_date: str) -> list[dict[str, str]] | None:
     max_page = get_max_page(html_content)
     if not max_page:
         return None
@@ -91,7 +91,7 @@ def crawl_javbee(url, html_content, publish_date):
                 
                 # 3. 提取磁力链接（关键新增部分）
                 magnet_tag = card.find('a', title="Download Magnet")
-                magnet_url = magnet_tag['href'] if magnet_tag and magnet_tag.has_attr('href') else "N/A"
+                magnet_url = str(magnet_tag['href']) if magnet_tag and magnet_tag.has_attr('href') else "N/A"
                 magnet_url = get_minimal_magnet(magnet_url)  # 获取最小化的磁力链接
     
                 if av_number == "N/A" or av_title == "N/A" or magnet_url == "N/A":
@@ -109,7 +109,7 @@ def crawl_javbee(url, html_content, publish_date):
         return results
     
     
-def get_yesterday_av():
+def get_yesterday_av() -> list[dict[str, str]] | None:
     yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
     date = yesterday.strftime("%Y-%m-%d")
     url = f"https://javbee.vip/date/{date}"
@@ -124,7 +124,7 @@ def get_yesterday_av():
     return crawl_javbee(url, response.text, date)
 
 
-def check_yesterday_exists():
+def check_yesterday_exists() -> bool:
     yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
     date = yesterday.strftime("%Y-%m-%d")
     with SqlLiteLib() as sqlite:
@@ -133,7 +133,7 @@ def check_yesterday_exists():
         return count is not None and count > 0
 
 
-def save_av_daily_update2db(results):
+def save_av_daily_update2db(results: list[dict[str, str]]) -> None:
     with SqlLiteLib() as sqlite:
         for item in results:
             av_number = item['av_number']
@@ -188,7 +188,7 @@ def save_av_daily_update2db(results):
             sqlite.execute_sql(sql_insert, params_insert)
             init.logger.info(f"AV日更 {av_number} 保存成功。")   
             
-def av_daily_update():
+def av_daily_update() -> None:
     # 检查配置是否启用AV日更
     if not init.require_bot_config().av_daily_update.enable:
         init.logger.info("AV日更功能未启用，跳过更新。")
@@ -222,7 +222,7 @@ def av_daily_update():
         init.logger.info("没有找到最新的AV更新。")  
         
         
-def crawl_javbee_by_date(date):
+def crawl_javbee_by_date(date: str) -> None:
     init.logger.info(f"开始获取{date}的AV更新...")
     results = get_av_by_date(date)
     if results:
@@ -236,25 +236,25 @@ def crawl_javbee_by_date(date):
     init.CRAWL_JAV_STATUS = 0
         
         
-def get_minimal_magnet(magnet_link):
+def get_minimal_magnet(magnet_link: str) -> str:
     return re.sub(r"(&dn=.*|&tr=.*)", "", magnet_link)
 
-def has_cjk_chars(text):
+def has_cjk_chars(text: str) -> bool:
     """检查字符串是否包含中文或日文字符"""
     pattern = re.compile(
         r'[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\u31f0-\u31ff\uff65-\uff9f]'
     )
     return bool(pattern.search(text))
 
-def is_pure_number(s):
+def is_pure_number(s: str) -> bool:
     """检查是否为纯数字"""
     return bool(re.fullmatch(r'^\d+$', s)) 
 
-def has_letters_and_digits(s):
+def has_letters_and_digits(s: str) -> bool:
     """检查是否同时包含英文和数字（允许-和_）"""
     return bool(re.fullmatch(r'^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d\-_]+$', s))
 
-def get_avnumber_title(parts):
+def get_avnumber_title(parts: list[str]) -> tuple[str, str]:
     longest = 0
     longest_index = -1
     av_number = "N/A"
@@ -292,5 +292,5 @@ if __name__ == "__main__":
     url = f"https://javbee.vip/date/2025-08-26"
     response = http_request("GET", url, verify=False, timeout=httpx.Timeout(60.0, connect=10.0))
     result = crawl_javbee(url, response.text, '2025-08-26')
-    for item in result:
+    for item in (result or []):
         print(item['av_number'], item['av_title'], item['magnet_url'])

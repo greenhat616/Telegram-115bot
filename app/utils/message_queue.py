@@ -2,7 +2,7 @@
 
 import asyncio
 from app import init
-from telegram import Bot
+from telegram import Bot, InlineKeyboardMarkup
 from telegram.helpers import escape_markdown
 
 # 全局消息队列
@@ -11,7 +11,7 @@ message_queue = asyncio.Queue()
 global_loop: asyncio.AbstractEventLoop | None = None
 
 
-def add_task_to_queue(sub_user, post_url, message, keyboard=None, retry_count=0):
+def add_task_to_queue(sub_user: int | str, post_url: str | None, message: str, keyboard: InlineKeyboardMarkup | None = None, retry_count: int = 0) -> bool:
     """向消息队列中添加任务（线程安全，用于非 async 上下文）"""
     global global_loop
     if global_loop is None:
@@ -34,7 +34,7 @@ def add_task_to_queue(sub_user, post_url, message, keyboard=None, retry_count=0)
         return False
 
 
-def add_task_to_queue_nowait(sub_user, post_url, message, keyboard=None, retry_count=0):
+def add_task_to_queue_nowait(sub_user: int | str, post_url: str | None, message: str, keyboard: InlineKeyboardMarkup | None = None, retry_count: int = 0) -> bool:
     """向消息队列中添加任务（非阻塞 fire-and-forget，适用于不想阻塞调用方的场景）"""
     global global_loop
     if global_loop is None:
@@ -52,7 +52,7 @@ def add_task_to_queue_nowait(sub_user, post_url, message, keyboard=None, retry_c
         return False
         
         
-async def queue_worker(loop, token):
+async def queue_worker(loop: asyncio.AbstractEventLoop, token: str) -> None:
     global global_loop
     """ 后台队列处理任务 """
     global_loop = loop

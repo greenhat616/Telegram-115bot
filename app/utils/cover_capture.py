@@ -13,7 +13,7 @@ import time
 from app.core.selenium_browser import SeleniumBrowser
 
 
-def get_movie_cover(query, page=1):
+def get_movie_cover(query: str, page: int = 1) -> str:
     """
     封面抓取
     :param query:
@@ -42,8 +42,8 @@ def get_movie_cover(query, page=1):
         page += 1
         time.sleep(3)
         return get_movie_cover(query, page)
-    tag_parent = image_tag.find_parent('a')
-    if 'href' not in tag_parent.attrs:
+    tag_parent = image_tag.find_parent('a')  # ty:ignore[unresolved-attribute]
+    if tag_parent is None or 'href' not in tag_parent.attrs:
         return ""
     main_page = tag_parent['href']
     url = base_url + main_page
@@ -54,7 +54,7 @@ def get_movie_cover(query, page=1):
     tags_img = soup.find_all('img')
     if len(tags_img) > 1 and 'src' not in tags_img[1].attrs:
         return ""
-    cover_url = tags_img[1]['src']
+    cover_url = str(tags_img[1]['src'])
     return cover_url
 
 
@@ -93,7 +93,7 @@ def get_movie_cover(query, page=1):
 #     return cover_url
 
 
-def is_movie_exist(movie_name, name_list):
+def is_movie_exist(movie_name: str, name_list: list) -> object | None:  # returns Tag | None
     """
     判断搜索结果是否存在
     :param url:
@@ -130,7 +130,7 @@ def is_movie_exist(movie_name, name_list):
 #     else:
 #         return "", ""
 
-def get_av_cover(query):
+def get_av_cover(query: str) -> tuple[str, str]:
     title = f"[{query}]已下好，但源没抓到~"
     cover_url = f"{init.IMAGE_PATH}/no_image.png"
     
@@ -156,7 +156,8 @@ def get_av_cover(query):
             if not movie_link:
                 return
             link = movie_link['href']  # 获取href属性
-            if link and link.startswith('//'):  # ty:ignore[unresolved-attribute]
+            link = str(link) if link else ""
+            if link.startswith('//'):
                 link = f"https:{link}"
             img_tag = movie_link.find('img')
             if img_tag:
@@ -182,7 +183,7 @@ def get_av_cover(query):
         
     return cover_url, title
 
-def is_av_exist(div_list):
+def is_av_exist(div_list: list) -> bool:
     """
     判断搜索结果是否存在
     :param div_list:

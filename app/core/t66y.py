@@ -25,8 +25,10 @@ import asyncio
 import time
 from app.utils.message_queue import add_task_to_queue
 from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.webdriver import WebDriver
+from typing import Any
 
-def _extract_magnet_sync(driver, url):
+def _extract_magnet_sync(driver: WebDriver | None, url: str) -> str:
     """
     同步执行的磁力链接提取逻辑 (运行在 executor 中)
     """
@@ -84,13 +86,14 @@ def _extract_magnet_sync(driver, url):
                     time.sleep(1)
                     
                     # 尝试从剪贴板读取
-                    magnet = driver.execute_async_script("""
+                    magnet_raw = driver.execute_async_script("""
                         var callback = arguments[arguments.length - 1];
                         navigator.clipboard.readText()
                             .then(text => callback(text))
                             .catch(err => callback(''));
                     """)
-                    
+                    magnet = str(magnet_raw) if magnet_raw else ""
+
                     if magnet:
                         # 如果不是以magnet:开头，尝试拼接
                         if not magnet.startswith("magnet:"):
@@ -99,7 +102,7 @@ def _extract_magnet_sync(driver, url):
                         # 清理tracker，只保留xt
                         try:
                             from urllib.parse import urlparse, parse_qs
-                            parsed = urlparse(magnet)
+                            parsed = urlparse(str(magnet))
                             params = parse_qs(parsed.query)
                             xt = params.get('xt', [])
                             if xt:
@@ -140,7 +143,7 @@ def _extract_magnet_sync(driver, url):
         
     return ""
 
-async def fetch_t66y_magnet(browser, url):
+async def fetch_t66y_magnet(browser: SeleniumBrowser, url: str) -> str:
     """
     t66y 专用的磁力链接获取函数
     """
@@ -154,7 +157,7 @@ async def fetch_t66y_magnet(browser, url):
     return await browser.run_with_driver(_extract_magnet_sync, url)
 
 
-def parse_t66y_html(html_content):
+def parse_t66y_html(html_content: str) -> dict[str, str]:
     soup = BeautifulSoup(html_content, "html.parser")
     
     # 1. Extract Poster
@@ -207,16 +210,16 @@ def parse_t66y_html(html_content):
         br.replace_with("\n")
 
     return {
-        "poster_url": poster_url,
+        "poster_url": str(poster_url),
         "magnet": magnet,
-        "fetch_url": last_link if not magnet and 'last_link' in locals() else ""
+        "fetch_url": str(last_link) if not magnet and 'last_link' in locals() else ""
     }
 
 
 
 
 
-def get_section_id(section_name):
+def get_section_id(section_name: str) -> int:
     section_map = {
         "亚洲无码原创": 2,
         "亚洲有码原创": 15,
@@ -229,21 +232,22 @@ def get_section_id(section_name):
     return section_map.get(section_name, 0)
 
 
-async def start_t66y_rss_async(section_name):
+async def start_t66y_rss_async(section_name: str | None) -> None:
     
+    config = init.require_bot_config()
     browser = None
     try:
         # Initialize browser
-        rss_host = init.require_bot_config().rsshub.rss_host
+        rss_host = config.rsshub.rss_host
         browser = SeleniumBrowser(rss_host)
         await browser.init_browser()
 
         if not browser.driver:
              init.logger.error("浏览器初始化失败，无法继续任务！")
-             add_task_to_queue(init.require_bot_config().allowed_user, None, f"❌ 浏览器初始化失败，无法继续任务！")
+             add_task_to_queue(config.allowed_user, None, f"❌ 浏览器初始化失败，无法继续任务！")
              return
 
-        t66y = init.require_bot_config().rsshub.t66y
+        t66y = config.rsshub.t66y
 
         for section in t66y.sections:
             if section_name and section.name != section_name:
@@ -253,7 +257,7 @@ async def start_t66y_rss_async(section_name):
                 init.logger.warning(f"未知的t66y版块名称: {section.name}，跳过该版块的RSS订阅")
                 continue
             rss_url = f"{rss_host.rstrip('/')}/t66y/{section_id}/today?format=json"
-            response = http_request("GET", rss_url, timeout=init.require_bot_config().rsshub.t66y.timeout)
+            response = http_request("GET", rss_url, timeout=config.rsshub.t66y.timeout)
             if response.status_code != 200:
                 init.logger.error(f"无法获取t66y RSS订阅，HTTP状态码: {response.status_code}")
                 continue
@@ -264,7 +268,7 @@ async def start_t66y_rss_async(section_name):
             save2DB_t66y(pares_results)
     except Exception as e:
         init.logger.error(f"处理t66y RSS订阅时出错: {e}")
-        add_task_to_queue(init.require_bot_config().allowed_user, None, f"❌ 处理t66y RSS订阅时出错: {e}")
+        add_task_to_queue(config.allowed_user, None, f"❌ 处理t66y RSS订阅时出错: {e}")
     finally:
         if browser:
             await browser.close()
@@ -273,7 +277,7 @@ async def start_t66y_rss_async(section_name):
 
     
 
-async def pares_t66y_rss(rss_data, section_name, save_path, browser):
+async def pares_t66y_rss(rss_data: dict[str, Any], section_name: str, save_path: str, browser: SeleniumBrowser) -> list[dict[str, str]]:
     items = rss_data.get("items", [])
     pares_results = []
     for item in items:
@@ -341,7 +345,7 @@ async def pares_t66y_rss(rss_data, section_name, save_path, browser):
             init.logger.error(f"解析t66y资源失败: {e}, title: {item.get('title', 'unknown')}")
     return pares_results
 
-def save2DB_t66y(results):
+def save2DB_t66y(results: list[dict[str, str]]) -> None:
     if not results:
         return
     insert_count = 0
@@ -385,7 +389,7 @@ def save2DB_t66y(results):
             init.logger.error(f"保存t66y资源到数据库失败: {e}, title: {result.get('title', 'unknown')}")
         
     
-def match_strategy(result):
+def match_strategy(result: dict[str, str]) -> tuple[bool, str | None]:
     yaml_path = init.STRATEGY_FILE
     strategy_config = None
     # 获取yaml文件名称

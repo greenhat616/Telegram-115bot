@@ -11,7 +11,7 @@ from app import init
 
 aria2: aria2p.API | None = None
 
-def create_aria2_client(host, port, secret):
+def create_aria2_client(host: str, port: int, secret: str) -> aria2p.API | None:
     global aria2
     if not host or not port or not secret:
         init.logger.warn("Aria2配置不完整，跳过Aria2实例化")
@@ -30,7 +30,7 @@ def create_aria2_client(host, port, secret):
         init.logger.error(f"Aria2客户端配置失败: {e}")
         return aria2
 
-def download_by_url(download_url, save_path=""):
+def download_by_url(download_url: str, save_path: str = "") -> aria2p.Download | None:
     """通过下载链接添加任务"""
     if not aria2:
         init.logger.warn("Aria2客户端未配置")
@@ -41,15 +41,15 @@ def download_by_url(download_url, save_path=""):
             }
         if save_path:
             options['dir'] = save_path
-        download = aria2.add(download_url, options=options)
+        downloads = aria2.add(download_url, options=options)
         init.logger.info(f"已添加下载任务: {download_url}")
-        return download
+        return downloads[0] if downloads else None
     except Exception as e:
         init.logger.error(f"添加下载任务失败: {e}")
         return None
 
 
-def check_status_by_url(download_url):
+def check_status_by_url(download_url: str) -> dict[str, object]:
     """通过下载链接检查任务状态"""
     if not aria2:
         init.logger.warn("Aria2客户端未配置")
@@ -109,7 +109,7 @@ def check_status_by_url(download_url):
         return {"status": "error", "message": f"检查下载状态失败: {str(e)}"}
 
 
-def _extract_download_urls(download):
+def _extract_download_urls(download: aria2p.Download) -> list[str]:
     """从下载任务中提取所有URL"""
     urls = []
     
@@ -158,7 +158,7 @@ def _extract_download_urls(download):
     return urls
 
 
-def check_status_by_gid(gid):
+def check_status_by_gid(gid: str) -> dict[str, object]:
     """通过GID检查任务状态"""
     if not aria2:
         init.logger.warn("Aria2客户端未配置")
@@ -175,7 +175,7 @@ def check_status_by_gid(gid):
         return {"status": "error", "message": f"检查下载状态失败: {str(e)}"}
 
 
-def get_status(download):
+def get_status(download: aria2p.Download) -> dict[str, object]:
     """获取下载状态详情
     status: active, waiting, paused, error, complete
     """

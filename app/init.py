@@ -77,7 +77,7 @@ def require_openapi_115() -> OpenAPI_115:
     return openapi_115
 
 
-def _get_system_chrome_version():
+def _get_system_chrome_version() -> str:
     """获取系统安装的 Chrome/Chromium 版本"""
     try:
         # 1. 尝试获取 google-chrome-stable 版本
@@ -113,7 +113,7 @@ if debug_mode:
     IMAGE_PATH = "app/images"
 
 
-def create_logger():
+def create_logger() -> None:
     """
     创建全局日志对象
     :return:
@@ -141,7 +141,7 @@ def create_logger():
     logger.info("Logger init success!")
 
 
-def load_yaml_config():
+def load_yaml_config() -> None:
     """
     读取配置文件
     :return:
@@ -184,19 +184,19 @@ def load_yaml_config():
         bot_config = BotConfig.model_validate(raw_config)
 
 
-def get_bot_token():
+def get_bot_token() -> str:
     global bot_config
     if bot_config:
         return bot_config.bot_token
     load_yaml_config()
     return bot_config.bot_token if bot_config else ""
 
-def create_tmp():
+def create_tmp() -> None:
     if not os.path.exists(TEMP):
         os.mkdir(TEMP, mode=0o777)
         os.chmod(TEMP, 0o777)
 
-def initialize_tg_usr_client():
+def initialize_tg_usr_client() -> bool:
     """
     初始化Tg用户客户端
     :return: bool - 初始化是否成功
@@ -264,7 +264,7 @@ def initialize_tg_usr_client():
         tg_user_client = None
         return False
     
-def initialize_115open():
+def initialize_115open() -> bool:
     """
     初始化115开放API客户端
     :return: bool - 初始化是否成功
@@ -289,7 +289,7 @@ def initialize_115open():
         return False
 
 
-def check_user(user_id):
+def check_user(user_id: int | str) -> bool:
     if bot_config is None:
         return False
     allowed = bot_config.allowed_user
@@ -297,7 +297,7 @@ def check_user(user_id):
         return user_id == allowed
     return str(user_id) == str(allowed)
 
-def create_tg_session_file():
+def create_tg_session_file() -> bool:
     """
     创建或验证Telegram session文件
     如果session文件存在但已过期，会重新创建
@@ -339,7 +339,7 @@ def create_tg_session_file():
     
     return True
 
-def init_aria2():
+def init_aria2() -> None:
     from app.utils.aria2 import create_aria2_client
     global aria2_client
     assert bot_config is not None
@@ -357,7 +357,7 @@ def init_aria2():
     else:
         aria2_client = None
 
-def init_db():
+def init_db() -> None:
     from app.utils.sqlitelib import SqlLiteLib
     with SqlLiteLib() as sqlite:
         # 创建表（如果不存在）
@@ -483,11 +483,11 @@ def init_db():
         logger.info("init DataBase success.")
         
 
-def init_log():
+def init_log() -> None:
     create_logger()
 
 
-def init():
+def init() -> None:
     """
     初始化应用程序
     注意：load_model() 已经在模块导入时调用，这里不再重复调用

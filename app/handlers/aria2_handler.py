@@ -1,3 +1,4 @@
+from typing import Any
 from telegram import Update
 from telegram.ext import ContextTypes, CallbackQueryHandler
 from pathlib import Path
@@ -13,7 +14,7 @@ from telegram.helpers import escape_markdown
 
 aria2_download_check_executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="Aria2_Download")
 
-def _do_aria2_push(save_path, download_path_base, device_name, chat_id):
+def _do_aria2_push(save_path: str, download_path_base: str, device_name: str, chat_id: int) -> tuple[bool, str]:
     """在工作线程中执行 Aria2 推送（同步阻塞操作）"""
     download_urls = init.require_openapi_115().get_file_download_url(save_path)
     init.logger.info(f"[{save_path}]目录发现{len(download_urls)}个文件需要下载")
@@ -99,7 +100,7 @@ async def push2aria2(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await query.answer(f"❌ 推送到{device_name}失败: {str(e)}", show_alert=True)
 
 
-def check_download_complete(download_url, user_id, device_name, check_interval=10):
+def check_download_complete(download_url: str, user_id: int, device_name: str, check_interval: int = 10) -> None:
     """检查下载任务是否完成"""
     message = ""
     while True:
@@ -127,7 +128,7 @@ def check_download_complete(download_url, user_id, device_name, check_interval=1
     )
 
 
-def register_aria2_handlers(application):
+def register_aria2_handlers(application: Any) -> None:
     aria2_handler = CallbackQueryHandler(push2aria2, pattern=r"^push2aria2_.+")
     application.add_handler(aria2_handler)
     init.logger.info("✅ Aria2处理器已注册")

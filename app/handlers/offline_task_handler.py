@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from typing import Any
 
 from app import init
 from app.utils.ptb_helpers import require_message, require_query, require_chat, require_user, require_user_data
@@ -189,7 +190,7 @@ async def handle_clear_retry_list(update: Update, context: ContextTypes.DEFAULT_
         await query.edit_message_text("操作已取消")
 
 
-def register_offline_task_handlers(application):
+def register_offline_task_handlers(application: Any) -> None:
     """注册离线任务处理器"""
     # 添加独立的命令处理器用于查看重试列表
     application.add_handler(CommandHandler("rl", view_retry_list))

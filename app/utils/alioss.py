@@ -1,7 +1,9 @@
+from typing import Any
+
 import alibabacloud_oss_v2 as oss
 
 
-def upload_file_to_oss(**kwargs):
+def upload_file_to_oss(**kwargs: Any) -> bool:
     """
     上传文件到阿里云OSS
     :param bucket: 桶名称
