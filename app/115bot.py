@@ -1,11 +1,16 @@
 # -*- coding: utf-8 -*-
 
+import os
 import time
 import asyncio
 import threading
+from typing import Any
 from importlib.metadata import version as pkg_version
+
+import httpx
 from telegram import Update, BotCommand
 from telegram.ext import ContextTypes, CommandHandler, Application
+from telegram.request import HTTPXRequest
 from telegram.helpers import escape_markdown
 
 # 导入init模块（此时__init__.py已经设置了模块路径）
@@ -23,6 +28,27 @@ from app.handlers.offline_task_handler import register_offline_task_handlers
 from app.handlers.aria2_handler import register_aria2_handlers
 from app.handlers.crawl_handler import register_crawl_handlers
 from app.handlers.rss_handler import register_rss_handlers
+
+
+# Polling 健康检查配置
+_polling_health_failures = 0
+_POLLING_HEALTH_FAILURE_LIMIT = 3
+_POLLING_STALE_THRESHOLD = (
+    105.0  # run_polling timeout(30) + read_timeout(60) + slack(15)
+)
+
+
+class PollingAwareHTTPXRequest(HTTPXRequest):
+    """追踪 getUpdates 最后成功响应时间的 HTTPXRequest 子类"""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.last_poll_ok_at = time.monotonic()
+
+    async def do_request(self, *args: Any, **kwargs: Any) -> tuple[int, bytes]:
+        result = await super().do_request(*args, **kwargs)
+        self.last_poll_ok_at = time.monotonic()
+        return result
 
 
 def get_version(md_format: bool = False) -> str:
@@ -198,7 +224,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         if isinstance(update, Update) and update.effective_chat:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text=f"⚠️ 处理请求时发生内部错误，请稍后重试。",
+                text="⚠️ 处理请求时发生内部错误，请稍后重试。",
             )
     except Exception:
         pass
@@ -207,6 +233,50 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 async def post_init(application: Application) -> None:
     """应用初始化后的回调"""
     await set_bot_menu(application)
+
+
+async def polling_health_check(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """检测 getUpdates 心跳，连续失败后退出进程交由 Docker 重启"""
+    global _polling_health_failures
+
+    polling_request = context.application.bot_data.get("polling_request")
+    if not isinstance(polling_request, PollingAwareHTTPXRequest):
+        init.logger.warning(
+            "Polling health check skipped: polling request monitor missing."
+        )
+        return
+
+    polling_age = time.monotonic() - polling_request.last_poll_ok_at
+
+    if polling_age <= _POLLING_STALE_THRESHOLD:
+        if _polling_health_failures > 0:
+            init.logger.info("Polling health check recovered.")
+        _polling_health_failures = 0
+        return
+
+    _polling_health_failures += 1
+    init.logger.warning(
+        f"Polling heartbeat stale ({_polling_health_failures}/{_POLLING_HEALTH_FAILURE_LIMIT}): "
+        f"age={polling_age:.1f}s threshold={_POLLING_STALE_THRESHOLD:.1f}s"
+    )
+
+    if _polling_health_failures < _POLLING_HEALTH_FAILURE_LIMIT:
+        return
+
+    init.logger.error(
+        "Polling heartbeat stale 3 consecutive times, exiting for Docker restart."
+    )
+    try:
+        config = init.require_bot_config()
+        await context.bot.send_message(
+            chat_id=config.allowed_user,
+            text="⚠️ Telegram polling 心跳连续 3 次超时，进程即将退出并等待 Docker 重启。",
+        )
+    except Exception:
+        pass
+
+    await asyncio.sleep(1)
+    os._exit(1)
 
 
 def main() -> None:
@@ -233,8 +303,40 @@ def main() -> None:
     init.logger.info(config.model_dump_json())
     # 调整telegram日志级别
     update_logger_level()
+
     token = config.bot_token
-    application = Application.builder().token(token).post_init(post_init).build()
+    # 常规 API 请求配置（sendMessage/sendPhoto 等）
+    regular_request = HTTPXRequest(
+        connection_pool_size=8,
+        connect_timeout=10.0,
+        read_timeout=30.0,
+        write_timeout=30.0,
+        pool_timeout=5.0,
+    )
+    # getUpdates 专用配置（禁用 keep-alive 防止半关闭连接）
+    get_updates_request = PollingAwareHTTPXRequest(
+        connection_pool_size=2,
+        connect_timeout=10.0,
+        read_timeout=60.0,
+        write_timeout=30.0,
+        pool_timeout=5.0,
+        httpx_kwargs={
+            "limits": httpx.Limits(
+                max_connections=2,
+                max_keepalive_connections=0,
+            )
+        },
+    )
+    application = (
+        Application.builder()
+        .token(token)
+        .request(regular_request)
+        .get_updates_request(get_updates_request)
+        .post_init(post_init)
+        .build()
+    )
+    # 存储 polling request 引用供健康检查使用
+    application.bot_data["polling_request"] = get_updates_request
     # 注册全局异常处理器
     application.add_error_handler(error_handler)
 
@@ -280,6 +382,21 @@ def main() -> None:
     # 注册视频
     register_video_handlers(application)
 
+    # 注册 polling 健康检查任务
+    if application.job_queue is not None:
+        application.job_queue.run_repeating(
+            polling_health_check,
+            name="polling_health_check",
+            interval=300,
+            first=120,
+            job_kwargs={"max_instances": 1, "coalesce": True},
+        )
+        init.logger.info("Polling health check registered (interval=300s)")
+    else:
+        init.logger.warning(
+            "JobQueue unavailable, polling health check not registered."
+        )
+
     init.logger.info(f"USER_AGENT: {init.USER_AGENT}")
 
     # 启动机器人轮询
@@ -289,7 +406,11 @@ def main() -> None:
         init.logger.info("订阅线程启动成功！")
         time.sleep(3)  # 等待订阅线程启动
         send_start_message()
-        application.run_polling()  # 阻塞运行
+        application.run_polling(
+            poll_interval=0.5,
+            timeout=30,
+            drop_pending_updates=False,
+        )
     except KeyboardInterrupt:
         init.logger.info("程序已被用户终止（Ctrl+C）。")
     except SystemExit:
