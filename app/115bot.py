@@ -32,10 +32,12 @@ from app.handlers.rss_handler import register_rss_handlers
 
 # Polling 健康检查配置
 _polling_health_failures = 0
-_POLLING_HEALTH_FAILURE_LIMIT = 3
+_POLLING_HEALTH_FAILURE_LIMIT = 5
 _POLLING_STALE_THRESHOLD = (
     105.0  # run_polling timeout(30) + read_timeout(60) + slack(15)
 )
+_polling_reconnect_attempts = 0
+_MAX_RECONNECT_ATTEMPTS = 2
 
 
 class PollingAwareHTTPXRequest(HTTPXRequest):
@@ -236,8 +238,8 @@ async def post_init(application: Application) -> None:
 
 
 async def polling_health_check(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """检测 getUpdates 心跳，连续失败后退出进程交由 Docker 重启"""
-    global _polling_health_failures
+    """检测 getUpdates 心跳，超时时尝试重建连接，多次重建失败后退出"""
+    global _polling_health_failures, _polling_reconnect_attempts
 
     polling_request = context.application.bot_data.get("polling_request")
     if not isinstance(polling_request, PollingAwareHTTPXRequest):
@@ -252,6 +254,7 @@ async def polling_health_check(context: ContextTypes.DEFAULT_TYPE) -> None:
         if _polling_health_failures > 0:
             init.logger.info("Polling health check recovered.")
         _polling_health_failures = 0
+        _polling_reconnect_attempts = 0
         return
 
     _polling_health_failures += 1
@@ -263,14 +266,38 @@ async def polling_health_check(context: ContextTypes.DEFAULT_TYPE) -> None:
     if _polling_health_failures < _POLLING_HEALTH_FAILURE_LIMIT:
         return
 
+    if _polling_reconnect_attempts < _MAX_RECONNECT_ATTEMPTS:
+        _polling_reconnect_attempts += 1
+        init.logger.warning(
+            f"Attempting to reconnect polling ({_polling_reconnect_attempts}/{_MAX_RECONNECT_ATTEMPTS})..."
+        )
+        try:
+            await polling_request.shutdown()
+            await polling_request.initialize()
+            polling_request.last_poll_ok_at = time.monotonic()
+            _polling_health_failures = 0
+            init.logger.info("Polling connection rebuilt successfully.")
+            try:
+                config = init.require_bot_config()
+                await context.bot.send_message(
+                    chat_id=config.allowed_user,
+                    text="🔄 Telegram polling 连接已重建。",
+                )
+            except Exception:
+                pass
+            return
+        except Exception as e:
+            init.logger.error(f"Failed to reconnect polling: {e}")
+
     init.logger.error(
-        "Polling heartbeat stale 3 consecutive times, exiting for Docker restart."
+        f"Polling heartbeat stale {_POLLING_HEALTH_FAILURE_LIMIT} consecutive times "
+        f"and {_MAX_RECONNECT_ATTEMPTS} reconnect attempts failed, exiting for Docker restart."
     )
     try:
         config = init.require_bot_config()
         await context.bot.send_message(
             chat_id=config.allowed_user,
-            text="⚠️ Telegram polling 心跳连续 3 次超时，进程即将退出并等待 Docker 重启。",
+            text=f"⚠️ Telegram polling 心跳连续 {_POLLING_HEALTH_FAILURE_LIMIT} 次超时且重建连接失败，进程即将退出。",
         )
     except Exception:
         pass
