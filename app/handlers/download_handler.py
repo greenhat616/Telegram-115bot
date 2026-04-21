@@ -36,6 +36,7 @@ from app.utils.ptb_helpers import (
     require_text,
     require_query_data,
     require_download_data,
+    safe_handler,
 )
 from concurrent.futures import ThreadPoolExecutor
 
@@ -51,6 +52,7 @@ download_executor = ThreadPoolExecutor(
 )
 
 
+@safe_handler
 async def start_d_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     config = init.require_bot_config()
     message = require_message(update)
@@ -213,6 +215,7 @@ async def handle_download_failure(
         await query.edit_message_text("✅ 已取消，可尝试更换磁力重试！")
 
 
+@safe_handler
 async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.callback_query:
         await update.callback_query.edit_message_text(text="🚪用户退出本次会话")

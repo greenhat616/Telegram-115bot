@@ -10,6 +10,7 @@ from app.utils.ptb_helpers import (
     require_chat,
     require_user,
     require_user_data,
+    safe_handler,
 )
 import os
 
@@ -18,6 +19,7 @@ import os
 # ASK_COOKIE, RECEIVE_COOKIE = range(0, 2)
 
 
+@safe_handler
 async def auth_pkce_115(update: Update, context: ContextTypes.DEFAULT_TYPE):
     import asyncio
 
@@ -61,6 +63,7 @@ def check_115_app_id() -> bool:
     return True
 
 
+@safe_handler
 async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 检查是否是回调查询
     if update.callback_query:

@@ -19,6 +19,7 @@ from app.utils.ptb_helpers import (
     require_user_data,
     require_text,
     require_query_data,
+    safe_handler,
 )
 import os
 import uuid
@@ -36,6 +37,7 @@ filterwarnings(
 )
 
 
+@safe_handler
 async def save_video2115(update: Update, context: ContextTypes.DEFAULT_TYPE):
     usr_id = require_user(update).id
     if not init.check_user(usr_id):
@@ -114,6 +116,7 @@ def _get_video_info(
     return cast(dict[str, Any], raw) if raw else None
 
 
+@safe_handler
 async def show_directory_selection(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -175,6 +178,7 @@ async def show_directory_selection(
         )
 
 
+@safe_handler
 async def handle_rename_input(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -200,6 +204,7 @@ async def handle_rename_input(
         await show_directory_selection(update, context, str(task_id))
 
 
+@safe_handler
 async def handle_category_selection(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:

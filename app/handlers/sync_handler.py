@@ -15,6 +15,7 @@ from app.utils.ptb_helpers import (
     require_chat,
     require_user,
     require_user_data,
+    safe_handler,
 )
 import asyncio
 import shutil
@@ -30,6 +31,7 @@ filterwarnings(
 SELECT_MAIN_CATEGORY_SYNC, SELECT_SUB_CATEGORY_SYNC = range(30, 32)
 
 
+@safe_handler
 async def sync_strm_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
     usr_id = require_user(update).id
     if not init.check_user(usr_id):
@@ -56,6 +58,7 @@ async def sync_strm_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return SELECT_MAIN_CATEGORY_SYNC
 
 
+@safe_handler
 async def select_main_category_sync(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = require_query(update)
     await query.answer()
@@ -104,6 +107,7 @@ async def select_main_category_sync(update: Update, context: ContextTypes.DEFAUL
         return SELECT_SUB_CATEGORY_SYNC
 
 
+@safe_handler
 async def select_sub_category_sync(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = require_query(update)
     await query.answer()
@@ -168,6 +172,7 @@ async def select_sub_category_sync(update: Update, context: ContextTypes.DEFAULT
         return ConversationHandler.END
 
 
+@safe_handler
 async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 检查是否是回调查询
     if update.callback_query:

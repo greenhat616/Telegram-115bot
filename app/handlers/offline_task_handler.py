@@ -8,6 +8,7 @@ from app.utils.ptb_helpers import (
     require_chat,
     require_user,
     require_user_data,
+    safe_handler,
 )
 from app.utils.sqlitelib import SqlLiteLib
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -192,6 +193,7 @@ def try_to_offline2115_again():
         time.sleep(2)
 
 
+@safe_handler
 async def view_retry_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """查看重试任务列表"""
     retry_list = get_failed_tasks()
@@ -216,6 +218,7 @@ async def view_retry_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+@safe_handler
 async def handle_clear_retry_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """处理清空重试列表的回调"""
     query = require_query(update)

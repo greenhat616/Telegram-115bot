@@ -23,6 +23,7 @@ from app.utils.ptb_helpers import (
     require_user_data,
     require_text,
     require_rss_data,
+    safe_handler,
 )
 from app.utils.message_queue import add_task_to_queue
 import re
@@ -40,6 +41,7 @@ RSS_CATEGORIES = ["JavBus", "草榴1024"]
 SELECT_MAIN_CATEGORY, SELECT_SUB_CATEGORY, RSS_WAIT_INPUT = range(70, 73)
 
 
+@safe_handler
 async def rss_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 权限检查
     usr_id = require_user(update).id
@@ -69,6 +71,7 @@ async def rss_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return SELECT_MAIN_CATEGORY
 
 
+@safe_handler
 async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = require_query(update)
     await query.answer()
@@ -125,6 +128,7 @@ async def select_main_category(update: Update, context: ContextTypes.DEFAULT_TYP
         return SELECT_SUB_CATEGORY
 
 
+@safe_handler
 async def select_sub_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = require_query(update)
     await query.answer()
@@ -177,6 +181,7 @@ async def select_sub_category(update: Update, context: ContextTypes.DEFAULT_TYPE
         return ConversationHandler.END
 
 
+@safe_handler
 async def rss_handle_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = require_text(update).strip()
     data = require_rss_data(context)
@@ -207,6 +212,7 @@ async def rss_handle_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+@safe_handler
 async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 检查是否是回调查询
     if update.callback_query:

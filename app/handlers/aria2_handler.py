@@ -12,6 +12,7 @@ from app.utils.ptb_helpers import (
     require_chat,
     require_user,
     require_user_data,
+    safe_handler,
 )
 from concurrent.futures import ThreadPoolExecutor
 from app.utils.aria2 import download_by_url, check_status_by_url
@@ -23,31 +24,7 @@ aria2_download_check_executor = ThreadPoolExecutor(
 )
 
 
-def _do_aria2_push(
-    save_path: str, download_path_base: str, device_name: str, chat_id: int
-) -> tuple[bool, str]:
-    """在工作线程中执行 Aria2 推送（同步阻塞操作）"""
-    download_urls = init.require_openapi_115().get_file_download_url(save_path)
-    init.logger.info(f"[{save_path}]目录发现{len(download_urls)}个文件需要下载")
-
-    path = Path(save_path)
-    last_part = path.parts[-1] if path.parts[-1] else path.parts[-2]
-    download_dir = os.path.join(download_path_base, last_part)
-    init.logger.info(f"推送到Aria2，下载目录: {download_dir}")
-    all_pushed = True
-    for download_url in download_urls:
-        download = download_by_url(download_url, download_dir)
-        if not download:
-            all_pushed = False
-            init.logger.error(f"推送到Aria2失败，下载链接: {download_url}")
-        else:
-            aria2_download_check_executor.submit(
-                check_download_complete, download_url, chat_id, device_name
-            )
-        time.sleep(1)
-    return all_pushed, last_part
-
-
+@safe_handler
 async def push2aria2(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = require_query(update)
     await query.answer()
@@ -136,6 +113,31 @@ async def push2aria2(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await query.answer(
                         f"❌ 推送到{device_name}失败: {str(e)}", show_alert=True
                     )
+
+
+def _do_aria2_push(
+    save_path: str, download_path_base: str, device_name: str, chat_id: int
+) -> tuple[bool, str]:
+    """在工作线程中执行 Aria2 推送（同步阻塞操作）"""
+    download_urls = init.require_openapi_115().get_file_download_url(save_path)
+    init.logger.info(f"[{save_path}]目录发现{len(download_urls)}个文件需要下载")
+
+    path = Path(save_path)
+    last_part = path.parts[-1] if path.parts[-1] else path.parts[-2]
+    download_dir = os.path.join(download_path_base, last_part)
+    init.logger.info(f"推送到Aria2，下载目录: {download_dir}")
+    all_pushed = True
+    for download_url in download_urls:
+        download = download_by_url(download_url, download_dir)
+        if not download:
+            all_pushed = False
+            init.logger.error(f"推送到Aria2失败，下载链接: {download_url}")
+        else:
+            aria2_download_check_executor.submit(
+                check_download_complete, download_url, chat_id, device_name
+            )
+        time.sleep(1)
+    return all_pushed, last_part
 
 
 def check_download_complete(

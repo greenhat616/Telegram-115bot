@@ -32,12 +32,12 @@ from app.handlers.rss_handler import register_rss_handlers
 
 # Polling 健康检查配置
 _polling_health_failures = 0
-_POLLING_HEALTH_FAILURE_LIMIT = 5
+_POLLING_HEALTH_FAILURE_LIMIT = 3  # 3 次失败后尝试重建
 _POLLING_STALE_THRESHOLD = (
     105.0  # run_polling timeout(30) + read_timeout(60) + slack(15)
 )
 _polling_reconnect_attempts = 0
-_MAX_RECONNECT_ATTEMPTS = 2
+_MAX_RECONNECT_ATTEMPTS = 3  # 最多尝试重建 3 次
 
 
 class PollingAwareHTTPXRequest(HTTPXRequest):
@@ -46,11 +46,30 @@ class PollingAwareHTTPXRequest(HTTPXRequest):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.last_poll_ok_at = time.monotonic()
+        self._consecutive_errors = 0
 
     async def do_request(self, *args: Any, **kwargs: Any) -> tuple[int, bytes]:
-        result = await super().do_request(*args, **kwargs)
-        self.last_poll_ok_at = time.monotonic()
-        return result
+        try:
+            result = await super().do_request(*args, **kwargs)
+            self.last_poll_ok_at = time.monotonic()
+            if self._consecutive_errors > 0:
+                init.logger.info(
+                    f"Polling request recovered after {self._consecutive_errors} consecutive errors."
+                )
+                self._consecutive_errors = 0
+            return result
+        except httpx.ConnectError as e:
+            self._consecutive_errors += 1
+            init.logger.warning(
+                f"Polling ConnectError ({self._consecutive_errors}): {e}"
+            )
+            raise
+        except httpx.TimeoutException as e:
+            self._consecutive_errors += 1
+            init.logger.warning(
+                f"Polling TimeoutException ({self._consecutive_errors}): {e}"
+            )
+            raise
 
 
 def get_version(md_format: bool = False) -> str:
@@ -414,11 +433,11 @@ def main() -> None:
         application.job_queue.run_repeating(
             polling_health_check,
             name="polling_health_check",
-            interval=300,
-            first=120,
+            interval=60,
+            first=60,
             job_kwargs={"max_instances": 1, "coalesce": True},
         )
-        init.logger.info("Polling health check registered (interval=300s)")
+        init.logger.info("Polling health check registered (interval=60s)")
     else:
         init.logger.warning(
             "JobQueue unavailable, polling health check not registered."
@@ -426,29 +445,62 @@ def main() -> None:
 
     init.logger.info(f"USER_AGENT: {init.USER_AGENT}")
 
-    # 启动机器人轮询
-    try:
-        # 启动订阅线程
-        start_scheduler_in_thread()
-        init.logger.info("订阅线程启动成功！")
-        time.sleep(3)  # 等待订阅线程启动
-        send_start_message()
-        application.run_polling(
-            poll_interval=0.5,
-            timeout=30,
-            drop_pending_updates=False,
-        )
-    except KeyboardInterrupt:
-        init.logger.info("程序已被用户终止（Ctrl+C）。")
-    except SystemExit:
-        init.logger.info("程序正在退出。")
-    except Exception as e:
-        import traceback
+    # 启动订阅线程（只启动一次）
+    start_scheduler_in_thread()
+    init.logger.info("订阅线程启动成功！")
+    time.sleep(3)  # 等待订阅线程启动
+    send_start_message()
 
-        error_details = traceback.format_exc()  # 获取完整的异常堆栈信息
-        init.logger.error(f"程序遇到错误：{str(e)}\n{error_details}")
-    finally:
-        init.logger.info("机器人已停止运行。")
+    # Polling 重启配置
+    max_polling_restarts = 5
+    polling_restart_count = 0
+    base_backoff = 5.0  # 初始退避秒数
+
+    # 启动机器人轮询（带自动重启）
+    while True:
+        try:
+            init.logger.info("Starting polling loop...")
+            application.run_polling(
+                poll_interval=0.5,
+                timeout=30,
+                drop_pending_updates=False,
+            )
+            # 正常退出（用户主动停止）
+            break
+        except KeyboardInterrupt:
+            init.logger.info("程序已被用户终止（Ctrl+C）。")
+            break
+        except SystemExit:
+            init.logger.info("程序正在退出。")
+            break
+        except (httpx.ConnectError, httpx.TimeoutException, httpx.RemoteProtocolError) as e:
+            polling_restart_count += 1
+            backoff = min(base_backoff * (2 ** (polling_restart_count - 1)), 60.0)
+            init.logger.warning(
+                f"Polling exited due to network error ({polling_restart_count}/{max_polling_restarts}): {e}"
+            )
+            if polling_restart_count >= max_polling_restarts:
+                init.logger.error(
+                    f"Polling failed {max_polling_restarts} times, exiting for Docker restart."
+                )
+                break
+            init.logger.info(f"Restarting polling in {backoff:.1f}s...")
+            time.sleep(backoff)
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            init.logger.error(f"Polling exited unexpectedly: {e}\n{error_details}")
+            polling_restart_count += 1
+            if polling_restart_count >= max_polling_restarts:
+                init.logger.error(
+                    f"Polling failed {max_polling_restarts} times with unexpected errors, exiting."
+                )
+                break
+            backoff = min(base_backoff * (2 ** (polling_restart_count - 1)), 60.0)
+            init.logger.info(f"Attempting restart in {backoff:.1f}s...")
+            time.sleep(backoff)
+
+    init.logger.info("机器人已停止运行。")
 
 
 if __name__ == "__main__":

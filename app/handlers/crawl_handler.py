@@ -8,11 +8,13 @@ from app.utils.ptb_helpers import (
     require_chat,
     require_user,
     require_user_data,
+    safe_handler,
 )
 import datetime
 import threading
 
 
+@safe_handler
 async def crawl_sehua(update: Update, context: ContextTypes.DEFAULT_TYPE):
     usr_id = require_user(update).id
     if not init.check_user(usr_id):
@@ -42,6 +44,7 @@ async def crawl_sehua(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
+@safe_handler
 async def crawl_jav(update: Update, context: ContextTypes.DEFAULT_TYPE):
     usr_id = require_user(update).id
     if not init.check_user(usr_id):

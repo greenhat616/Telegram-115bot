@@ -25,6 +25,7 @@ from app.utils.ptb_helpers import (
     require_document,
     require_query_data,
     require_av_download_data,
+    safe_handler,
 )
 from app.utils.message_queue import add_task_to_queue
 import re
@@ -40,6 +41,7 @@ download_executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="AV_Dow
 SELECT_MAIN_CATEGORY, SELECT_SUB_CATEGORY = range(60, 62)
 
 
+@safe_handler
 async def start_av_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     usr_id = require_user(update).id
     if not init.check_user(usr_id):
@@ -123,6 +125,7 @@ async def start_batch_download_command(
     return SELECT_MAIN_CATEGORY
 
 
+@safe_handler
 async def download_from_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     usr_id = require_user(update).id
     if not init.check_user(usr_id):
@@ -307,6 +310,7 @@ async def select_sub_category(
         return ConversationHandler.END
 
 
+@safe_handler
 async def quit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # 检查是否是回调查询
     if update.callback_query:

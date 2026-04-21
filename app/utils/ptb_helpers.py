@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
-from typing import cast
+import traceback
+from functools import wraps
+from typing import Any, Callable, TypeVar, cast
 
 from telegram import Document, Update, Chat, User, Message, CallbackQuery
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
 
+from app import init
 from app.models.context import (
     AvDownloadUserData,
     CrawlUserData,
@@ -113,3 +116,99 @@ def require_query_data(update: Update) -> str:
     if data is None:
         raise RuntimeError("handler requires callback_query.data")
     return data
+
+
+# ── Handler exception wrapper ────────────────────────────────────
+
+T = TypeVar("T")
+HandlerFunc = Callable[[Update, ContextTypes.DEFAULT_TYPE], Any]
+
+
+def _extract_handler_context(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Extract context info from update for logging."""
+    parts: list[str] = []
+
+    # User info
+    user = update.effective_user
+    if user:
+        parts.append(f"user={user.id}(@{user.username or 'N/A'})")
+
+    # Chat info
+    chat = update.effective_chat
+    if chat:
+        parts.append(f"chat={chat.id}(type={chat.type})")
+
+    # Command/message info
+    if update.message:
+        if update.message.text:
+            text = update.message.text
+            if len(text) > 100:
+                text = text[:100] + "..."
+            parts.append(f"text={text!r}")
+        if update.message.document:
+            parts.append(f"document={update.message.document.file_name}")
+    elif update.callback_query:
+        parts.append(f"callback_data={update.callback_query.data!r}")
+
+    # Command args from context
+    if context.args:
+        parts.append(f"args={context.args}")
+
+    return " | ".join(parts)
+
+
+def handler_error_boundary(
+    handler_name: str | None = None,
+    notify_user: bool = True,
+    end_conversation: bool = True,
+) -> Callable[[HandlerFunc], HandlerFunc]:
+    """
+    Decorator to wrap PTB handlers with unified exception handling.
+
+    - Logs full context (user, chat, command, args) on error
+    - Optionally notifies user of the error
+    - Prevents exceptions from bubbling to the framework
+    - Returns ConversationHandler.END if end_conversation=True
+    """
+
+    def decorator(func: HandlerFunc) -> HandlerFunc:
+        name = handler_name or func.__name__
+
+        @wraps(func)
+        async def wrapper(
+            update: Update, context: ContextTypes.DEFAULT_TYPE
+        ) -> Any:
+            try:
+                return await func(update, context)
+            except Exception as e:
+                error_tb = traceback.format_exc()
+                handler_ctx = _extract_handler_context(update, context)
+                init.logger.error(
+                    f"Handler [{name}] exception: {e}\n"
+                    f"Context: {handler_ctx}\n"
+                    f"Traceback:\n{error_tb}"
+                )
+
+                if notify_user:
+                    try:
+                        chat = update.effective_chat
+                        if chat:
+                            await context.bot.send_message(
+                                chat_id=chat.id,
+                                text=f"⚠️ 处理命令时发生错误，请稍后重试。\n错误: {type(e).__name__}",
+                            )
+                    except Exception:
+                        pass
+
+                if end_conversation:
+                    return ConversationHandler.END
+                return None
+
+        return wrapper
+
+    return decorator
+
+
+def safe_handler(func: HandlerFunc) -> HandlerFunc:
+    """Shorthand for @handler_error_boundary() with default settings."""
+    return handler_error_boundary()(func)
