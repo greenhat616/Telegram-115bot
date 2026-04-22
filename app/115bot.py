@@ -296,14 +296,6 @@ async def polling_health_check(context: ContextTypes.DEFAULT_TYPE) -> None:
             polling_request.last_poll_ok_at = time.monotonic()
             _polling_health_failures = 0
             init.logger.info("Polling connection rebuilt successfully.")
-            try:
-                config = init.require_bot_config()
-                await context.bot.send_message(
-                    chat_id=config.allowed_user,
-                    text="🔄 Telegram polling 连接已重建。",
-                )
-            except Exception:
-                pass
             return
         except Exception as e:
             init.logger.error(f"Failed to reconnect polling: {e}")
